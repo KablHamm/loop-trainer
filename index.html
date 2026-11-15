@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Loop Trainer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1213">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root {
     --bg: #0e1213; --panel: #151b1d; --panel2: #1b2326; --line: #263135;
@@ -3003,6 +3008,9 @@ loadCustom();
 const sm = parseInt(store('lt_map'), 10); if (sm >= 0 && sm < MAPS.length) mapIdx = sm;
 const sd = store('lt_diff'); if (DIFF[sd]) diffKey = sd;
 buildDrills(); showMenu(); requestAnimationFrame(frame);
+
+// When served from a web address, register the service worker so the game can be installed and played offline.
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // test hook: step the simulation without the render loop
 window.LT = { get s() { return { runner, chaser, stats, mode, specials, now }; }, keys, update, startRun,

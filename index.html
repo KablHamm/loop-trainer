@@ -65,6 +65,17 @@
   #dataBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   #dataMsg { font-size: 12px; color: var(--accent); margin-top: 6px; }
   #dataMsg:empty { display: none; }
+  #ghBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+  #ghBtns button, #ghSetBtns button { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; }
+  #ghBtns button { border-color: #2c5a50; color: var(--teal); }
+  #ghSetup { margin-top: 8px; font-size: 12px; color: var(--dim); }
+  #ghSetup summary { cursor: pointer; color: var(--text); }
+  #ghSetup label { display: block; margin-top: 8px; }
+  #ghSetup input { display: block; width: 100%; margin-top: 3px; background: #0b0f10; border: 1px solid var(--line);
+    color: var(--text); border-radius: 6px; padding: 6px 8px; font: 12px Consolas, monospace; }
+  #ghSetBtns { display: flex; gap: 6px; margin-top: 8px; }
+  #ghSetup .note { margin-top: 8px; }
   #edbar button, #drillBtns button, #dataBtns button { background: var(--panel2); border: 1px solid var(--line);
     color: var(--text); border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; }
   #edbar button.on { border-color: var(--accent); color: var(--accent); background: #262419; }
@@ -159,6 +170,16 @@
       <button data-a="import">Import file</button><button data-a="paste">Paste</button>
     </div>
     <input type="file" id="dataFile" accept=".json,application/json" class="hide">
+    <div id="ghBtns">
+      <button data-a="ghsave">Save to GitHub</button><button data-a="ghload">Load from GitHub</button>
+    </div>
+    <details id="ghSetup">
+      <summary>GitHub setup</summary>
+      <label>Repository<input id="ghRepoIn" type="text" placeholder="owner/name" autocomplete="off" spellcheck="false"></label>
+      <label>Access token (only needed to save)<input id="ghTokIn" type="password" placeholder="paste your token here" autocomplete="off"></label>
+      <div id="ghSetBtns"><button id="ghSetSave">Remember on this device</button><button id="ghForget">Forget token</button></div>
+      <div class="note">Loading needs no token. Saving needs a GitHub token that is allowed to write to this one repository. It is kept only in this browser and is sent only to GitHub.</div>
+    </details>
     <div id="dataMsg"></div>
 
     <h2>Controls</h2>
@@ -2959,6 +2980,69 @@ $('dataBtns').addEventListener('click', async e => {
     catch (err) { dataMsg('This browser wouldn\'t allow pasting. Use Import file instead.'); }
   }
 });
+/* Save to / load from GitHub: the same export file, kept in a repository so every device can reach it. */
+const GH_PATH = 'saves/loop-trainer-data.json';
+// Which repository to use: the one typed into setup, else the one this page is being served from, else the author's.
+function ghRepo() {
+  const typed = (store('lt_gh_repo') || '').trim(); if (/^[\w.-]+\/[\w.-]+$/.test(typed)) return typed;
+  const host = location.hostname.match(/^([\w-]+)\.github\.io$/), first = location.pathname.split('/').filter(Boolean)[0];
+  return host && first ? host[1] + '/' + first : 'KablHamm/loop-trainer';
+}
+function ghCall(method, accept, body) {
+  const tok = (store('lt_gh_token') || '').trim(), headers = { Accept: accept };
+  if (tok) headers.Authorization = 'Bearer ' + tok;
+  return fetch('https://api.github.com/repos/' + ghRepo() + '/contents/' + GH_PATH, { method, headers, cache: 'no-store', body: body ? JSON.stringify(body) : undefined });
+}
+const ghWhy = r => r.status === 401 ? 'GitHub did not accept the token. Check it in GitHub setup.'
+  : r.status === 403 ? 'GitHub refused (the token may not have write access to this repository, or too many requests were made; try again in a few minutes).'
+  : r.status === 404 ? 'GitHub could not find the repository "' + ghRepo() + '", or the token is not allowed to see it.'
+  : r.status === 409 || r.status === 422 ? 'The copy on GitHub changed while saving. Press Save to GitHub again.'
+  : 'GitHub answered with an error (' + r.status + ').';
+async function ghSave() {
+  if (!(store('lt_gh_token') || '').trim()) { $('ghSetup').open = true; dataMsg('Saving needs a GitHub token. Open GitHub setup below, paste one and press "Remember on this device".'); return; }
+  dataMsg('Saving to GitHub…');
+  try {
+    const data = JSON.parse(exportData());
+    data.savedAt = new Date().toISOString(); data.savedFrom = /Android|iPhone|iPad/.test(navigator.userAgent) ? 'phone or tablet' : 'computer';
+    const text = JSON.stringify(data);
+    const cur = await ghCall('GET', 'application/vnd.github+json');           // the existing file's id, if there is one
+    if (!cur.ok && cur.status !== 404) { dataMsg(ghWhy(cur)); return; }
+    const sha = cur.ok ? (await cur.json()).sha : undefined;
+    const res = await ghCall('PUT', 'application/vnd.github+json',
+      { message: 'Save drills from the ' + data.savedFrom, content: btoa(unescape(encodeURIComponent(text))), sha });
+    if (!res.ok) { dataMsg(ghWhy(res)); return; }
+    dataMsg('Saved to GitHub: ' + data.drills.length + ' drill' + (data.drills.length === 1 ? '' : 's') + ' and ' + data.stamps.length +
+            ' stamp' + (data.stamps.length === 1 ? '' : 's') + '. On your other device, press Load from GitHub.');
+  } catch (e) { dataMsg('Could not reach GitHub. Check your connection and try again.'); }
+}
+async function ghLoad() {
+  dataMsg('Loading from GitHub…');
+  try {
+    const res = await ghCall('GET', 'application/vnd.github.raw+json');
+    if (res.status === 404) { dataMsg('Nothing has been saved to GitHub yet (looked in ' + ghRepo() + '). Use Save to GitHub on the device that has your drills.'); return; }
+    if (!res.ok) { dataMsg(ghWhy(res)); return; }
+    const text = await res.text(); let meta = {}; try { meta = JSON.parse(text); } catch (e) {}
+    importData(text);
+    if (meta && meta.app === 'loop-trainer' && meta.savedAt) {
+      const when = new Date(meta.savedAt);
+      dataMsg($('dataMsg').textContent + ' That copy was saved ' + (isNaN(when) ? '' : when.toLocaleString() + ' ') + 'from a ' + (meta.savedFrom || 'device') + '.');
+    }
+  } catch (e) { dataMsg('Could not reach GitHub. Check your connection and try again.'); }
+}
+$('ghBtns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  b.blur(); if (b.dataset.a === 'ghsave') ghSave(); else ghLoad();
+});
+$('ghRepoIn').value = store('lt_gh_repo') || ''; $('ghRepoIn').placeholder = ghRepo();
+$('ghSetSave').addEventListener('click', () => {
+  const repo = $('ghRepoIn').value.trim(), tok = $('ghTokIn').value.trim();
+  if (repo && !/^[\w.-]+\/[\w.-]+$/.test(repo)) { dataMsg('The repository should look like owner/name.'); return; }
+  store('lt_gh_repo', repo);
+  if (tok) { store('lt_gh_token', tok); $('ghTokIn').value = ''; }
+  $('ghRepoIn').placeholder = ghRepo();
+  dataMsg('Remembered. Using ' + ghRepo() + ((store('lt_gh_token') || '') ? ', with a token for saving.' : ', with no token yet (loading only).'));
+});
+$('ghForget').addEventListener('click', () => { store('lt_gh_token', ''); $('ghTokIn').value = ''; dataMsg('Token forgotten on this device.'); });
 $('dataFile').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const rd = new FileReader();
@@ -2982,7 +3066,7 @@ $('optShiftRun').addEventListener('change', e => { store('lt_optShiftRun', e.tar
 const GAME_KEYS = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD'];
 addEventListener('keydown', e => {
   // typing in a name or size box must never be swallowed by the game keys
-  if (e.target.tagName === 'INPUT' && (e.target.type === 'text' || e.target.type === 'number')) return;
+  if (e.target.tagName === 'INPUT' && ['text', 'number', 'password'].includes(e.target.type)) return;
   if (GAME_KEYS.includes(e.code)) e.preventDefault();
   if (mode === 'edit') {
     const b = document.querySelectorAll('#tools button')[parseInt(e.key, 10) - 1];

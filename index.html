@@ -164,6 +164,10 @@
     <label class="chk"><input type="checkbox" id="optPath"> Show chaser's planned route</label>
     <label class="chk"><input type="checkbox" id="optNoChaser"> No chaser (explore the map)</label>
 
+    <h2>Sound</h2>
+    <label class="chk"><input type="checkbox" id="optSound"> Ambient sound and chase music</label>
+    <label class="chk">Volume <input type="range" id="optVol" min="0" max="100" value="60" style="flex:1"></label>
+
     <h2>Move drills &amp; stamps between browsers</h2>
     <div id="dataBtns">
       <button data-a="export">Export file</button><button data-a="copy">Copy</button>
@@ -232,6 +236,7 @@
       <select id="edItem">
         <option value="">Place an item…</option>
         <option value="E">Exit gate</option>
+        <option value="Z">Exit line (5 tiles, beyond a gate)</option>
         <option value="H">Hatch</option>
         <option value="J">Task box (gates stay locked until all are done)</option>
         <option value="L">Locker (hide inside)</option>
@@ -369,8 +374,12 @@ const MAPS = [
 const CFG = {
   runnerSpeed: 4.0, walkSpeed: 2.26, boostSpeed: 6.0, boostTime: 1.8,
   markLife: 7, markGap: 0.4,
-  gateTime: 8, hatchAfter: 60,   // seconds of holding to open a gate; seconds in chase before the hatch opens
+  gateTime: 8, hatchAfter: 120,  // seconds of holding to open a gate; seconds in chase before the hatch opens
   taskTime: 10,                  // seconds of holding to finish one task box
+  kickTime: 2,                   // seconds the chaser takes to damage a task box
+  taskRegress: 0.1,              // progress a damaged box loses per second (so a full box takes 100 s to drain)
+  vaultHear: 20,                 // how far away, in tiles, the chaser hears a vault made at a run
+  engineRange: 8,                // how far away you can hear a task box's engine
   fastVault: 0.5, slowVault: 0.9,
   chaserVault: 1.7, breakTime: 2.6, stunTime: 2.0,
   lungeSpeed: 6.9, lungeTime: 0.45, hitRange: 1.0,
@@ -392,7 +401,7 @@ let W = 0, H = 0, G = null, VOID = null, spec = [], specials = [];
 let GROUND = [];
 const groundAt = (x, y) => GROUND[Math.floor(y) * W + Math.floor(x)];
 let SIGHT = null, PROP = [], hatchSaid = false;   // what blocks sight (1 always, 2 only from afar); prop letter per cell
-const STRUCT_RE = /[#WPTKXBGEHJLSDAFNQV12]/;                 // anything placed on the map: walls, windows, pallets, items
+const STRUCT_RE = /[#WPTKXBGEHJLSDAFNQV12Z]/;                 // anything placed on the map: walls, windows, pallets, items
 const PROPS = 'TKXBG';
 let runner, chaser, stats, now = 0, mode = 'menu';
 let floaters = [], flash = 0, msgT = 0, marks = [];
@@ -428,7 +437,7 @@ function obbPush(o, x, y, r) {
 }
 // Half-triangle walls: a wall filling half a tile, split corner to corner. The letter says which corner is solid.
 const TRI_CHARS = 'FNQV';   // north-west, north-east, south-east, south-west
-let TRI = new Uint8Array(0), DPAL = [];
+let TRI = new Uint8Array(0), DPAL = [], EXITL = new Uint8Array(0), hasExitLine = false, exitVert = false;
 const triVerts = (t, cx, cy) => t === 1 ? [cx, cy, cx + 1, cy, cx, cy + 1] : t === 2 ? [cx, cy, cx + 1, cy, cx + 1, cy + 1]
   : t === 3 ? [cx + 1, cy, cx + 1, cy + 1, cx, cy + 1] : [cx, cy, cx + 1, cy + 1, cx, cy + 1];
 const inTri = (t, u, v) => t === 1 ? u + v < 1 : t === 2 ? u > v : t === 3 ? u + v > 1 : v > u;   // u, v: position inside the tile, 0 to 1
@@ -495,7 +504,7 @@ function loadMap() {
   SIGHT = new Uint8Array(W * H); PROP = new Array(W * H);
   GROUND = new Array(W * H); AIR = new Uint8Array(W * H); STAIR = new Uint8Array(W * H);
   RAIL = new Uint8Array(W * H); EDGE = new Uint8Array(W * H); DECK = new Uint8Array(W * H); ASTAIR = new Uint8Array(W * H);
-  TRI = new Uint8Array(W * H); PBLOCK = new Uint8Array(W * H);
+  TRI = new Uint8Array(W * H); PBLOCK = new Uint8Array(W * H); EXITL = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x;
     if (x === 0 || y === 0 || x === W - 1 || y === H - 1) { G[i] = 1; SIGHT[i] = 1; continue; }
@@ -519,6 +528,7 @@ function loadMap() {
                   vaults: 0, jamUntil: 0, lastVault: -99, checkedT: -99 };
       spec[i] = s; specials.push(s); if (ch === 'E' || ch === 'L') SIGHT[i] = 1;
     }
+    else if (ch === 'Z') EXITL[i] = 1;                              // exit line: cross it once a gate is open to escape
     else if (ch.length === 1 && TRI_CHARS.includes(ch)) { TRI[i] = 1 + TRI_CHARS.indexOf(ch); PBLOCK[i] = 1; }   // half-triangle wall
     else if (ch === '1' || ch === '2') {                            // a pallet lying diagonally
       const s = { type: 'pallet', diag: +ch, x, y, axis: 'x', state: 'up', vaults: 0, jamUntil: 0, lastVault: -99 };
@@ -610,9 +620,10 @@ function loadMap() {
       for (let cx = Math.max(1, Math.floor(ob.x - ob.rad - 1)); cx <= Math.min(W - 2, Math.ceil(ob.x + ob.rad + 1)); cx++)
         if (obbPush(ob, cx + .5, cy + .5, 0.42)) PBLOCK[cy * W + cx] = 1;
   }
-  FL.push({ G, VOID, SIGHT, PROP, GROUND, HILL, RAMP, RDX, RDY, spec, specials, hills, AIR, STAIR, RAIL, EDGE, DECK, ASTAIR, edgeAny, OBJS, PBLOCK, TRI, DPAL });
+  FL.push({ G, VOID, SIGHT, PROP, GROUND, HILL, RAMP, RDX, RDY, spec, specials, hills, AIR, STAIR, RAIL, EDGE, DECK, ASTAIR, edgeAny, OBJS, PBLOCK, TRI, DPAL, EXITL });
   }
   useFloor(0);
+  hasExitLine = FL.some(F => F.EXITL.some(v => v));
   // distBuf must be 64-bit: 32-bit rounding made the search skip cells. One entry per tile per floor.
   distBuf = new Float64Array(W * H * FL.length); prevBuf = new Int32Array(W * H * FL.length);
 
@@ -624,9 +635,9 @@ function loadMap() {
              path: null, repath: 0, cell: -1, prevCell: -1, chaseT: 0, fakeUntil: -9, fakeCell: -1,
              sees: true, target: null, vault: null, tier: 0,
              kx: cs[0], ky: cs[1], tracked: false, saw: false, inChase: false, lastLeadT: -9, markT: -9,
-             onLead: false, arriveT: -9, lastSawT: -9, lockerTarget: null, lockPt: null, slowT: 0, hill: 0, onRamp: false };
+             onLead: false, arriveT: -9, lastSawT: -9, lockerTarget: null, lockPt: null, taskTarget: null, taskPt: null, bushT: {}, slowT: 0, hill: 0, onRamp: false };
   stats = { time: 0, stuns: 0, drops: 0, earlyDrops: 0, fast: 0, slow: 0, dodges: 0,
-            vaultHits: 0, jams: 0, maxTier: 0, breaks: 0, palletHits: 0, closest: 99, lost: 0, chase: 0, chases: 0, tasks: 0, hides: 0, grabs: 0 };
+            vaultHits: 0, jams: 0, maxTier: 0, breaks: 0, palletHits: 0, closest: 99, lost: 0, chase: 0, chases: 0, tasks: 0, hides: 0, grabs: 0, loudVaults: 0, kicked: 0 };
   runner.floor = 0; runner.stairLock = false;
   chaser.floor = 0; chaser.stairLock = false; chaser.kf = 0; chaser.kvia = -1;   // kf: the floor it thinks you are on
   now = 0; floaters = []; flash = 0;
@@ -638,7 +649,7 @@ function loadMap() {
 // so everything that reads the map (collision, sight, items) acts on that floor.
 function useFloor(f) {
   const F = FL[f] || FL[0]; if (!F) return;
-  ({ G, VOID, SIGHT, PROP, GROUND, HILL, RAMP, RDX, RDY, spec, specials, hills, AIR, STAIR, RAIL, EDGE, DECK, ASTAIR, edgeAny, OBJS, PBLOCK, TRI, DPAL } = F);
+  ({ G, VOID, SIGHT, PROP, GROUND, HILL, RAMP, RDX, RDY, spec, specials, hills, AIR, STAIR, RAIL, EDGE, DECK, ASTAIR, edgeAny, OBJS, PBLOCK, TRI, DPAL, EXITL } = F);
   curFloor = FL[f] ? f : 0;
 }
 const allSpecials = () => FL.length > 1 ? FL[0].specials.concat(FL[1].specials) : specials;
@@ -681,6 +692,7 @@ function floorCheck(e, stagger) {
 const blocking = s => !!s && (s.type === 'window' || (s.state === 'down' && !s.diag) || s.type === 'task' || s.type === 'locker' || (s.type === 'gate' && s.state !== 'open'));
 const tasksLeft = () => allSpecials().filter(s => s.type === 'task' && s.state !== 'done').length;
 const hatchOpen = () => stats.chase >= CFG.hatchAfter;
+const hatchWait = () => CFG.hatchAfter % 60 ? CFG.hatchAfter + ' seconds' : CFG.hatchAfter / 60 + (CFG.hatchAfter === 60 ? ' minute' : ' minutes');
 const isSolid = (cx, cy) => {
   if (cx < 0 || cy < 0 || cx >= W || cy >= H) return true;
   const i = cy * W + cx;
@@ -832,7 +844,7 @@ function findPath(si, ti, pen) {
       const j = ny * W + nx; if (F.G[j] === 1) continue;
       if (F.PBLOCK[j] && base + j !== ti) continue;   // under a car or large crate (the goal itself is still allowed)
       const sj = F.spec[j], bj = blocking(sj);
-      if (sj && (sj.type === 'gate' || sj.type === 'task' || sj.type === 'locker')) continue;   // exits, task boxes and lockers are just obstacles to the chaser
+      if (sj && ((sj.type === 'gate' && sj.state !== 'open') || sj.type === 'task' || sj.type === 'locker')) continue;   // shut gates, task boxes and lockers are just obstacles to the chaser; it can follow you through an open gate
       const noClimb = k => F.HILL[k] && !F.RAMP[k] && F.HILL[k] !== F.HILL[i];   // can't step up a hill except by its ramp
       if (noClimb(j)) continue;
       // a railing or staircase side on the edge between two tiles stops a step across it
@@ -862,6 +874,7 @@ function findPath(si, ti, pen) {
           if (!hin || !hout || hin !== hout) cost += breakCost;
         }
       }
+      if (F.PROP[j] === 'G') cost += 4;                // it goes round bushes rather than through them when it can
       if (pen && pen[base + j]) cost += pen[base + j];
       relax(base + j, cost);
     }
@@ -978,7 +991,7 @@ function nearestAction(dx, dy) {
 }
 
 function dropPallet(s) {
-  s.state = 'down'; stats.drops++;
+  s.state = 'down'; stats.drops++; sndPallet();
   const cx = s.x + .5, cy = s.y + .5, c = chaser;
   const cd = Math.hypot(c.x - runner.x, c.y - runner.y);
   if (cd > 5) stats.earlyDrops++;
@@ -1014,6 +1027,17 @@ function startRunnerVault(a) {
   runner.vault = { fx: runner.x, fy: runner.y,
     tx: a.tx !== undefined ? a.tx : s.axis === 'x' ? cx + side : cx, ty: a.ty !== undefined ? a.ty : s.axis === 'x' ? cy : cy + side,   // a diagonal pallet supplies its own landing spot
     p: 0, dur: fast ? CFG.fastVault : CFG.slowVault };
+  if (runner.running) {
+    // Vaulting at a run is noisy. If the chaser is on this floor and within earshot it heads for where you land,
+    // whether or not it could see you. A walked vault is silent.
+    sndVault(); stats.loudVaults++;
+    const c = chaser;
+    if (!$('optNoChaser').checked && c.floor === runner.floor && c.state !== 'stun' &&
+        Math.hypot(c.x - runner.x, c.y - runner.y) < CFG.vaultHear) {
+      if (!c.inChase && !c.saw) floatText(runner.x, runner.y - 1.1, 'heard!', '#e2503f');
+      c.kx = runner.vault.tx; c.ky = runner.vault.ty; c.kf = runner.floor; c.kvia = -1; c.lastLeadT = now; c.onLead = true; c.repath = 0;
+    }
+  }
   if (fast) { stats.fast++; floatText(runner.x, runner.y - .6, 'fast vault', '#4fd1b5'); }
   else { stats.slow++; floatText(runner.x, runner.y - .6, 'slow vault', '#8a9a98'); }
   if (s.type === 'window') {
@@ -1078,11 +1102,12 @@ function updateRunner(dt) {
     if (a.kind === 'drop' && spacePressed) dropPallet(a.s);
     if (a.kind === 'jam' && spacePressed) say('Jammed — find another route');
     if (a.kind === 'hatch' && spacePressed) { endRun('hatch'); return; }
-    if (a.kind === 'hatchShut' && spacePressed) say('The hatch opens after ' + CFG.hatchAfter + ' s in chase');
+    if (a.kind === 'hatchShut' && spacePressed) say('The hatch opens after ' + hatchWait() + ' in chase');
     if (a.kind === 'locker' && spacePressed) { enterLocker(a.s); return; }
     if (a.kind === 'gateLocked' && spacePressed) { const n = tasksLeft(); say('Gate locked — ' + n + ' task' + (n === 1 ? '' : 's') + ' still to do'); }
     if (a.kind === 'task' && actionHeld()) {
-      // working on a task roots you to the spot; progress is kept if you let go
+      // working on a task roots you to the spot; progress is kept if you let go. Touching a damaged box stops it losing progress.
+      a.s.regress = false;
       a.s.prog += dt; r.vx = r.vy = 0; r.running = false; r.headT = 0;
       r.face = Math.atan2(a.s.y + .5 - r.y, a.s.x + .5 - r.x);
       if (a.s.prog >= CFG.taskTime) {
@@ -1097,9 +1122,9 @@ function updateRunner(dt) {
     }
     if (a.kind === 'gate' && actionHeld()) {
       // opening a gate roots you to the spot; progress is kept if you let go
-      a.s.prog += dt; r.vx = r.vy = 0; r.running = false; r.headT = 0;
+      r.gateT = now; a.s.prog += dt; r.vx = r.vy = 0; r.running = false; r.headT = 0;
       r.face = Math.atan2(a.s.y + .5 - r.y, a.s.x + .5 - r.x);
-      if (a.s.prog >= CFG.gateTime) { a.s.state = 'open'; say('The gate is open — run through it!'); }
+      if (a.s.prog >= CFG.gateTime) { a.s.state = 'open'; say(hasExitLine ? 'The gate is open — get across the exit line!' : 'The gate is open — run through it!'); }
       return;
     }
   }
@@ -1110,12 +1135,23 @@ function updateRunner(dt) {
   resolve(r);
   floorCheck(r, 0.35);
   landCheck(r, 0.3);
+  // Bushes hide you the way a locker does: step into one unseen and the chaser cannot see you in it at any
+  // distance, unless it comes right up to you. If it watched you go in, it is not fooled.
+  const inBush = PROP[Math.floor(r.y) * W + Math.floor(r.x)] === 'G';
+  if (inBush && !r.inBush) {
+    const c = chaser; r.bushSpotted = !$('optNoChaser').checked && c.floor === r.floor && (c.saw || (c.inChase && now - c.lastSawT < 1));
+    say(r.bushSpotted ? 'The chaser saw you go into the bush!' : 'Hidden in the bush'); if (!r.bushSpotted) stats.hides++;
+  }
+  r.inBush = inBush; r.bushHide = inBush && !r.bushSpotted;
   const here = spec[Math.floor(r.y) * W + Math.floor(r.x)];
-  if (here && here.type === 'gate' && here.state === 'open') { endRun('gate'); return; }
+  // Escaping: with no exit line on the map, stepping into an open gate is enough. If there are exit lines,
+  // the gate just lets you through and you have to reach a line.
+  if (!hasExitLine && here && here.type === 'gate' && here.state === 'open') { endRun('gate'); return; }
+  if (EXITL[Math.floor(r.y) * W + Math.floor(r.x)] && allSpecials().some(s => s.type === 'gate' && s.state === 'open')) { endRun('gate'); return; }
   // running leaves scratch marks and walking leaves nothing, except that
   // snow shows your footprints even at a walk and water washes all tracks away
   if (r.running) r.lastRunT = now;
-  if (gHere !== 'w' && (r.running || (gHere === 's' && (dx || dy)))) {
+  if (gHere !== 'w' && !inBush && (r.running || (gHere === 's' && (dx || dy)))) {   // and no marks show inside a bush
     r.markDist += sp * dt;
     if (r.markDist >= CFG.markGap) {
       r.markDist = 0;
@@ -1145,6 +1181,11 @@ function turnToward(c, tx, ty, rate, dt) {
   const m = rate * dt; c.face += Math.max(-m, Math.min(m, d));
 }
 
+function lineThroughBush(ax, ay, bx, by) {
+  const d = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(d / 0.25));
+  for (let i = 1; i <= n; i++) { const t = i / n; if (PROP[Math.floor(ay + (by - ay) * t) * W + Math.floor(ax + (bx - ax) * t)] === 'G') return true; }
+  return false;
+}
 // choose somewhere to look: close by just after losing a lead, otherwise anywhere on the map
 function pickSearch(c, local) {
   // a wider patrol sometimes goes to the other floor, if the drill has one
@@ -1154,9 +1195,9 @@ function pickSearch(c, local) {
     const sx = local ? c.x + (Math.random() - .5) * 14 : 1 + Math.random() * (W - 2);
     const sy = local ? c.y + (Math.random() - .5) * 14 : 1 + Math.random() * (H - 2);
     if (sx < 1 || sy < 1 || sx >= W - 1 || sy >= H - 1) continue;
-    if (isSolid(Math.floor(sx), Math.floor(sy)) || AIR[Math.floor(sy) * W + Math.floor(sx)] || PBLOCK[Math.floor(sy) * W + Math.floor(sx)]) continue;
+    if (isSolid(Math.floor(sx), Math.floor(sy)) || AIR[Math.floor(sy) * W + Math.floor(sx)] || PBLOCK[Math.floor(sy) * W + Math.floor(sx)] || PROP[Math.floor(sy) * W + Math.floor(sx)] === 'G') continue;   // it does not pick a bush as somewhere to look
     if (!local && f === c.floor && Math.hypot(sx - c.x, sy - c.y) < 8 && i < 20) continue;
-    c.kx = sx; c.ky = sy; c.kf = f; c.kvia = -1; c.repath = 0; break;
+    c.kx = sx; c.ky = sy; c.kf = f; c.kvia = -1; c.repath = 0; c.poke = false; break;
   }
   useFloor(back);
 }
@@ -1164,7 +1205,7 @@ function pickSearch(c, local) {
 function updateChaser(dt) {
   const c = chaser, r = runner, D = DIFF[diffKey];
   const dist = Math.hypot(r.x - c.x, r.y - c.y), same = r.floor === c.floor;   // on different floors it can neither see nor reach you
-  c.sees = same && los(c.x, c.y, r.x, r.y);
+  c.sees = same && los(c.x, c.y, r.x, r.y) && !(r.bushHide && !(dist <= 0.45 || (c.poke && dist <= 0.8)));   // hidden in a bush unless it bumps right into you, or is searching that bush
   if (same) stats.closest = Math.min(stats.closest, dist);
 
   // The chaser has to find you. It only gets a lead by seeing you or seeing a scratch mark.
@@ -1173,9 +1214,9 @@ function updateChaser(dt) {
   c.saw = c.sees && dist < 26 && (c.inChase || dist < 3 || inArc(r.x, r.y));
   let lead = c.saw;
   // Once a chase is on, it can also hear you running close by, so it can cut you off round a loop.
-  const heard = same && c.inChase && dist < 9 && now - r.lastRunT < 0.3;
+  const heard = same && c.inChase && dist < 9 && now - r.lastRunT < 0.3 && !r.bushHide;   // a bush you are hidden in muffles your footsteps
   if (c.saw) c.lastSawT = now;
-  if (c.saw || heard) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; }
+  if (c.saw || heard) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; c.leadKind = 'sight'; }
   else {
     let best = null;
     for (const m of marks) {
@@ -1186,11 +1227,11 @@ function updateChaser(dt) {
       if (!best || m.t > best.t) best = m;
     }
     if (best) {   // follow the freshest mark it can see; a mark on a staircase means the trail carries on upstairs or down
-      c.kx = best.rx; c.ky = best.ry; c.kf = c.floor; c.kvia = best.via ? 1 - c.floor : -1; c.markT = best.t; lead = true;
+      c.kx = best.rx; c.ky = best.ry; c.kf = c.floor; c.kvia = best.via ? 1 - c.floor : -1; c.markT = best.t; lead = true; c.leadKind = 'marks';
     }
   }
-  if (lead) { c.lastLeadT = now; c.onLead = true; }
-  let arrived = c.floor === c.kf && Math.hypot(c.x - c.kx, c.y - c.ky) < 1.2;
+  if (lead) { c.lastLeadT = now; c.onLead = true; c.poke = false; }
+  let arrived = c.floor === c.kf && Math.hypot(c.x - c.kx, c.y - c.ky) < (c.poke ? 0.4 : 1.2);   // when poking into a bush it goes right in
   if (!lead && arrived && c.kvia >= 0) { c.kf = c.kvia; c.kvia = -1; c.repath = 0; c.lastLeadT = now; arrived = false; }   // take the stairs after you
   if (!lead && arrived && c.onLead) { c.onLead = false; c.arriveT = now; }
   // The chase holds while it is still running to where it last had you (up to 8 s),
@@ -1202,12 +1243,44 @@ function updateChaser(dt) {
   if (c.inChase) stats.chase += dt;
   c.tracked = c.inChase;
   if (c.slowT > 0) c.slowT -= dt;
+  // Task boxes: a box that has been started makes engine noise. If the chaser is not busy with you and is
+  // within earshot of one, it walks over and damages it, after which the box slowly loses progress.
+  if (c.taskTarget) {
+    const T = c.taskTarget, dl = Math.hypot(c.x - T.x - .5, c.y - T.y - .5);
+    if (lead || T.state === 'done' || T.regress || T.prog <= 0 || Math.hypot(c.kx - c.taskPt[0], c.ky - c.taskPt[1]) > 0.1) c.taskTarget = null;
+    else if (dl < 1.6 && c.state === 'chase') { c.state = 'kick'; c.t = CFG.kickTime; c.face = Math.atan2(T.y + .5 - c.y, T.x + .5 - c.x); }
+  } else if (!lead && !c.inChase && !c.lockerTarget && c.state === 'chase') {
+    let T = null, bd = CFG.engineRange;
+    for (const s of specials) {
+      if (s.type !== 'task' || s.state === 'done' || s.regress || s.prog <= 0) continue;
+      const d = Math.hypot(c.x - s.x - .5, c.y - s.y - .5);
+      if (d < bd) { bd = d; T = s; }
+    }
+    let pt = null;
+    if (T) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const px = T.x + dx, py = T.y + dy;
+      if (!isSolid(px, py) && !PBLOCK[py * W + px] && (!pt || Math.hypot(px + .5 - c.x, py + .5 - c.y) < Math.hypot(pt[0] - c.x, pt[1] - c.y))) pt = [px + .5, py + .5];
+    }
+    if (pt) { c.taskTarget = T; c.taskPt = pt; c.kx = pt[0]; c.ky = pt[1]; c.kf = c.floor; c.kvia = -1; c.repath = 0; }
+  }
+  if (c.state === 'kick') {             // damaging a task box
+    c.t -= dt;
+    if (c.t <= 0) {
+      const T = c.taskTarget; c.taskTarget = null; c.state = 'chase'; c.path = null;
+      if (T && T.state !== 'done') {
+        T.regress = true; stats.kicked++;
+        floatText(T.x + .5, T.y - .2, 'damaged', '#e2503f'); say('The chaser damaged a task box — it is losing progress');
+      }
+      pickSearch(c, true);
+    }
+    return;
+  }
   if (c.lockerTarget) {
     // on its way to open a locker
     const Lk = c.lockerTarget, dl = Math.hypot(c.x - (Lk.x + .5), c.y - (Lk.y + .5));
     if (c.saw || Math.hypot(c.kx - c.lockPt[0], c.ky - c.lockPt[1]) > 0.1) c.lockerTarget = null;   // something else has its attention
     else if (dl < 1.6 && c.state === 'chase') { c.state = 'check'; c.t = 1.2; c.face = Math.atan2(Lk.y + .5 - c.y, Lk.x + .5 - c.x); }
-  } else if (!lead && arrived) {
+  } else if (!lead && arrived && !c.taskTarget) {
     // Lost you: look in a locker close to where the trail went cold, then search around
     const recent = now - Math.max(c.lastLeadT, c.arriveT) < 6;
     let Lk = null, bd = 3.2;
@@ -1222,7 +1295,19 @@ function updateChaser(dt) {
       if (!isSolid(px, py) && (!pt || Math.hypot(px + .5 - c.x, py + .5 - c.y) < Math.hypot(pt[0] - c.x, pt[1] - c.y))) pt = [px + .5, py + .5];
     }
     if (pt) { c.lockerTarget = Lk; c.lockPt = pt; c.kx = pt[0]; c.ky = pt[1]; c.kf = c.floor; c.kvia = -1; c.repath = 0; }
-    else { if (Lk) Lk.checkedT = now; pickSearch(c, recent); }
+    else {
+      if (Lk) Lk.checkedT = now;
+      // No locker to open. It only pokes into a bush if scratch marks led it right up to one (within 2 tiles);
+      // losing sight of you near a bush is not enough, so walking in unseen keeps you hidden.
+      let bush = -1, bb = 2;
+      if (recent && c.leadKind === 'marks') for (let cy = Math.floor(c.y) - 4; cy <= Math.floor(c.y) + 4; cy++) for (let cx = Math.floor(c.x) - 4; cx <= Math.floor(c.x) + 4; cx++) {
+        if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) continue;
+        const bi = cy * W + cx; if (PROP[bi] !== 'G' || now - (c.bushT[bi] === undefined ? -99 : c.bushT[bi]) < 20) continue;
+        const d = Math.hypot(cx + .5 - c.x, cy + .5 - c.y); if (d < bb) { bb = d; bush = bi; }
+      }
+      if (bush >= 0) { c.poke = true; c.bushT[bush] = now; c.kx = (bush % W) + .5; c.ky = ((bush / W) | 0) + .5; c.kf = c.floor; c.kvia = -1; c.repath = 0; }
+      else pickSearch(c, recent);
+    }
   }
 
   if (c.state === 'check') {            // opening a locker
@@ -1300,12 +1385,13 @@ function updateChaser(dt) {
     if (!c.path && !c.saw) pickSearch(c, false);      // can't get there: look somewhere else
   }
   const path = c.path;
+  const goalIsBush = PROP[Math.floor(c.ky) * W + Math.floor(c.kx)] === 'G' || PROP[cell] === 'G';   // heading into a bush on purpose, or already in one
   let tx = c.kx, ty = c.ky;
   const direct = c.saw && walkClear(c.x, c.y, r.x, r.y, c.r);
   if (direct) { c.fakeUntil = -9; tx = r.x; ty = r.y; }
   if (!direct && path && path.length >= 2) {
     // occasionally double back when the runner can't see us
-    if (c.state === 'chase' && D.fake > 0 && !c.sees && now > c.fakeUntil + 2.5 &&
+    if (c.state === 'chase' && c.inChase && D.fake > 0 && !c.sees && now > c.fakeUntil + 2.5 &&
         path.length > 3 && path.length < 13 && Math.random() < D.fake * dt) {
       c.fakeUntil = now + 0.8 + Math.random() * 0.9; c.fakeCell = path[1]; c.repath = 0;
     }
@@ -1331,7 +1417,8 @@ function updateChaser(dt) {
         const fj = (path[j] / N) | 0, ij = path[j] - fj * N;
         if (fj !== c.floor || blocking(spec[ij])) break;
         const px = (ij % W) + .5, py = ((ij / W) | 0) + .5;
-        if (walkClear(c.x, c.y, px, py, c.r + D.slack)) k = j;
+        // Take the shortcut to this point only if it is clear, and does not cut through a bush the route was going round.
+        if (walkClear(c.x, c.y, px, py, c.r + D.slack) && (goalIsBush || !lineThroughBush(c.x, c.y, px, py))) k = j;
         if (STAIR[ij] || AIR[ij]) break;   // never cut the corner past a staircase or the edge of the upper floor
       }
       const ik = path[k] - ((path[k] / N) | 0) * N;
@@ -1350,12 +1437,19 @@ function updateChaser(dt) {
   }
   const dx = tx - c.x, dy = ty - c.y, l = Math.hypot(dx, dy);
   if (l > 0.01) {
-    const step = Math.min(l, speed * dt);
+    const step = Math.min(l, speed * dt), px0 = c.x, py0 = c.y;
     if (l < 0.7) { turnToward(c, dx / l, dy / l, 14, dt); c.x += dx / l * step; c.y += dy / l * step; }
     else {
       // limited turning: it swings wide on corners instead of tracing them perfectly
       turnToward(c, dx / l, dy / l, D.turn, dt);
       c.x += Math.cos(c.face) * step; c.y += Math.sin(c.face) * step;
+    }
+    // Its route goes round bushes, so don't let a wide swing carry it into one: head straight for the route point instead.
+    if (!goalIsBush && PROP[Math.floor(c.y) * W + Math.floor(c.x)] === 'G') {
+      const inBushAt = (x, y) => PROP[Math.floor(y) * W + Math.floor(x)] === 'G';
+      const tries = [[px0 + dx / l * step, py0 + dy / l * step], [px0 + Math.sign(dx) * step, py0], [px0, py0 + Math.sign(dy) * step]];   // straight at it, else slide along the bush
+      const ok = tries.find(([x, y]) => !inBushAt(x, y));
+      if (ok) { c.x = ok[0]; c.y = ok[1]; } else { c.x = px0; c.y = py0; }
     }
     resolve(c);
     floorCheck(c, 0.8);
@@ -1369,6 +1463,11 @@ function update(dt) {
   useFloor(runner.floor); updateRunner(dt);
   if (mode === 'play' && !$('optNoChaser').checked) { useFloor(chaser.floor); updateChaser(dt); }
   useFloor(runner.floor);
+  if (mode === 'play') for (const s of allSpecials()) {            // damaged task boxes slowly lose progress
+    if (s.type !== 'task' || !s.regress || s.state === 'done') continue;
+    s.prog -= dt * CFG.taskRegress;
+    if (s.prog <= 0) { s.prog = 0; s.regress = false; }
+  }
   if (mode === 'play' && !hatchSaid && hatchOpen() && allSpecials().some(s => s.type === 'hatch')) { hatchSaid = true; say('The hatch has opened'); }
   spacePressed = false;
 }
@@ -1389,7 +1488,7 @@ function endRun(escapedBy) {
   if (!stats.drops && allSpecials().some(s => s.type === 'pallet')) tips.push('You never dropped a pallet. An unused pallet is worth nothing once you\'re down.');
   if (stats.grabs) tips.unshift('You were pulled out of a locker. Only hide when the chaser hasn\'t seen you get in, and walk the last few steps — scratch marks lead it straight to the door.');
   if (escapedBy) tips.unshift(escapedBy === 'gate' ? 'You opened the exit gate and got out. Opening it takes ' + CFG.gateTime + ' s of standing still, so you had to earn that distance first.'
-                                                    : 'You survived ' + CFG.hatchAfter + ' s in chase and escaped through the hatch.');
+                                                    : 'You survived ' + hatchWait() + ' in chase and escaped through the hatch.');
   if (!tips.length) tips.push(t < 30 ? 'Stay on one loop and focus only on cutting corners tight. Turn on "See chaser through walls" until the rhythm clicks.'
                                      : 'Clean run. Try the next difficulty, or turn the training aids off.');
   $('card').innerHTML =
@@ -1489,7 +1588,7 @@ function setTool(t) {
   else if (edFloor) { settleFloors(); saveCustom(); }   // the outline is drawn on the ground floor
   tool = t; outCells = [];
   if (t !== 'stamp') { $('edStamp').value = ''; stampRows = null; }
-  if (!'EHJLUIMYSDATKXBG?'.includes(t)) $('edItem').value = '';
+  if (!'EHJLUIMYZSDATKXBG?'.includes(t)) $('edItem').value = '';
   if (!t.startsWith('g:')) $('edGround').value = '';
   $('edGroundFill').classList.toggle('hide', !t.startsWith('g:'));
   for (const x of document.querySelectorAll('#tools button')) x.classList.toggle('on', x.dataset.t === t);
@@ -1841,6 +1940,16 @@ function paintAt(e, erase) {
   }
   let ch = erase ? '.' : tool;
   if (ch === 'P' && palDiag) ch = String(palDiag);    // a pallet turned to lie diagonally
+  if (ch === 'Z') {                                   // exit line: five tiles in a row, laid only on empty floor
+    const key = p[0] + ',' + p[1]; if (lastPaint === key) return; lastPaint = key;
+    let any = false;
+    for (let k = -2; k <= 2; k++) {
+      const x = p[0] + (exitVert ? 0 : k), y = p[1] + (exitVert ? k : 0);
+      if (m.rows[y] && m.rows[y][x] === '.') { m.rows[y] = setCh(m.rows[y], x, 'Z'); any = true; }
+    }
+    if (any) { saveCustom(); loadMap(); } else edMsg('No empty floor there for the exit line.');
+    return;
+  }
   if (ch === 'tri') {                                 // half-triangle wall; clicking one that is there turns it to the next corner
     const cur = m.rows[p[1]][p[0]], key = p[0] + ',' + p[1];
     if (lastPaint === key) return;                    // one change per tile per drag
@@ -1968,7 +2077,7 @@ function canRelocate(cells, out) {
   for (const [x, y] of out) {
     if (y < 0 || y >= m.rows.length || x < 0 || x >= m.rows[0].length) return 'edge';
     if (m.rows[y][x] === '~' && !edFloor) return 'edge';
-    if (!own.has(y * 1000 + x) && /[#OWPRCTKXBGEHJLSDAFNQV12UIMY]/.test(m.rows[y][x])) return 'overlap';
+    if (!own.has(y * 1000 + x) && /[#OWPRCTKXBGEHJLSDAFNQV12ZUIMY]/.test(m.rows[y][x])) return 'overlap';
   }
   return '';
 }
@@ -2125,11 +2234,11 @@ function importData(text) {
   showMenu();   // leave the editor or a run before changing the drill list
   let nd = 0, ns = 0;
   for (const m of Array.isArray(d.drills) ? d.drills : []) {
-    const rows = m && clean(m.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12UIMY]/g); if (!rows) continue;
+    const rows = m && clean(m.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12ZUIMY]/g); if (!rows) continue;
     const id = String(m.id || 'c' + Date.now().toString(36) + nd), name = String(m.name || 'My drill').slice(0, 30);
     const cur = MAPS.find(x => x.custom && x.id === id);
     const ground = clean(m.ground, /[^.mdsgcawpfl]/g) || undefined;
-    const upRows = m.up && clean(m.up.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12UIMY]/g);
+    const upRows = m.up && clean(m.up.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12ZUIMY]/g);
     const up = upRows ? { rows: upRows, ground: clean(m.up.ground, /[^.mdsgcawpfl]/g) || [], rail: clean(m.up.rail, /[^0-9a-f]/g) || [] } : undefined;
     const rail = clean(m.rail, /[^0-9a-f]/g) || undefined, objs = cleanObjs(m.objs);
     if (cur) { cur.name = name; cur.rows = rows; cur.ground = ground; cur.rail = rail; cur.objs = objs; cur.up = up; cur.swapped = false; }
@@ -2137,7 +2246,7 @@ function importData(text) {
     nd++;
   }
   for (const s of Array.isArray(d.stamps) ? d.stamps : []) {
-    const rows = s && typeof s.name === 'string' && clean(s.rows, /[^#WP.TKXBGEHJLSDAFNQV12]/g); if (!rows) continue;
+    const rows = s && typeof s.name === 'string' && clean(s.rows, /[^#WP.TKXBGEHJLSDAFNQV12Z]/g); if (!rows) continue;
     const name = s.name.slice(0, 30), i = userStamps.findIndex(u => sameName(u.name, name));
     if (i >= 0) userStamps[i] = { name, rows }; else userStamps.push({ name, rows });
     ns++;
@@ -2238,10 +2347,26 @@ function drawGround(g, x, y) {
   } else if (g === 'f') {     // wooden floor
     rect('#4a3826', 0, 0, 1.01, 1.01); stroke('#33261a', .04, [0, .33, 1, .33]); stroke('#33261a', .04, [0, .67, 1, .67]);
     stroke('#33261a', .04, [.3 + v * .4, 0, .3 + v * .4, .33]); stroke('#33261a', .04, [.7 - v * .4, .33, .7 - v * .4, .67]);
-  } else if (g === 'l') {     // fallen leaves
-    rect('#2c241a', 0, 0, 1.01, 1.01);
-    const cols = ['#8a4a1e', '#a8702a', '#6b3a18', '#93602a'];
-    for (let i = 0; i < 5; i++) dot(cols[(h + i) % 4], .15 + ((h * (i + 3)) % 11) * .07, .15 + ((h + i * 7) % 11) * .07, .075);
+  } else if (g === 'l') {     // fallen leaves are drawn afterwards as rounded piles (drawLeaves), so nothing square goes down here
+  }
+}
+// A pile of fallen leaves: overlapping round lobes rather than a square, so a single tile is a soft heap.
+// Where leaf tiles touch, the join is filled in, so a bigger patch is solid inside with a rounded outline.
+function drawLeaves(x, y) {
+  const h = (x * 73 + y * 151) % 17, leaf = (dx, dy) => GROUND[(y + dy) * W + x + dx] === 'l';
+  // The pile is a circle. A side that touches another leaf tile is squared off to meet it, so a single tile is a
+  // round heap and the outer corners of a bigger patch are quarter-circles.
+  const n = leaf(0, -1), e = leaf(1, 0), s = leaf(0, 1), w = leaf(-1, 0);
+  ctx.fillStyle = '#3a2c1c';
+  ctx.beginPath(); ctx.arc(x + .5, y + .5, n || e || s || w ? .5 : .44, 0, 7); ctx.fill();
+  if (n) ctx.fillRect(x - .01, y - .01, 1.02, .52); if (s) ctx.fillRect(x - .01, y + .5, 1.02, .52);
+  if (w) ctx.fillRect(x - .01, y - .01, .52, 1.02); if (e) ctx.fillRect(x + .5, y - .01, .52, 1.02);
+  // The leaves themselves: small ovals at different angles, kept inside the round part so they don't square it off again.
+  const cols = ['#8a4a1e', '#a8702a', '#6b3a18', '#93602a', '#b5852f'];
+  for (let i = 0; i < 11; i++) {
+    const ang = (h * 1.7 + i * 2.4) % 6.283, rad = (i === 0 ? 0 : .1 + ((h + i * 5) % 7) * .045);
+    ctx.fillStyle = cols[(h + i) % 5]; ctx.beginPath();
+    ctx.ellipse(x + .5 + Math.cos(ang) * rad, y + .5 + Math.sin(ang) * rad, .09, .052, (h + i) * 0.9, 0, 7); ctx.fill();
   }
 }
 function drawCorn(x, y) {
@@ -2337,6 +2462,13 @@ function drawTri(x, y, t) {
   ctx.strokeStyle = '#4a5c61'; ctx.lineWidth = .08; ctx.beginPath();
   if (t === 1 || t === 3) { ctx.moveTo(x + 1, y); ctx.lineTo(x, y + 1); } else { ctx.moveTo(x, y); ctx.lineTo(x + 1, y + 1); }
   ctx.stroke();
+}
+// One tile of an exit line. across: the line runs left to right. live: a gate is open, so crossing it escapes.
+function drawExitTile(x, y, across, live) {
+  ctx.fillStyle = live ? 'rgba(79,209,181,.22)' : 'rgba(138,154,152,.10)'; ctx.fillRect(x, y, 1.01, 1.01);
+  ctx.strokeStyle = live ? '#4fd1b5' : '#5a6b70'; ctx.lineWidth = .1; ctx.setLineDash([.22, .14]); ctx.beginPath();
+  if (across) { ctx.moveTo(x, y + .5); ctx.lineTo(x + 1, y + .5); } else { ctx.moveTo(x + .5, y); ctx.lineTo(x + .5, y + 1); }
+  ctx.stroke(); ctx.setLineDash([]);
 }
 function drawDeck(x, y) {
   const v = ((x * 31 + y * 17) % 9) / 9;
@@ -2480,16 +2612,21 @@ function draw() {
       if ((x + y) & 1) { ctx.fillStyle = layered ? '#252f33' : '#192124'; ctx.fillRect(x, y, 1, 1); }
       const g = GROUND[i]; if (g) drawGround(g, x, y);
     }
+    // leaf piles last, so their rounded edges spill a little over the neighbouring tiles
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (GROUND[y * W + x] === 'l' && !(layered && VOID[y * W + x])) drawLeaves(x, y);
   };
 
   const c = chaser, r = runner;
   const noChaser = $('optNoChaser').checked && (mode === 'play' || mode === 'over');
-  const drawMid = () => {
-  // scratch marks
+  // Scratch marks. Ones on flat ground go under the walls; ones on a rock hill or staircase are drawn
+  // afterwards, on top of it, or the rock would cover them.
   marks = marks.filter(m => now - m.t < CFG.markLife);
+  const drawMarks = raised => {
   ctx.lineCap = 'round'; ctx.lineWidth = .055;
   for (const m of marks) {
     if ((m.f || 0) !== vf) continue;
+    const mi = Math.floor(m.ry) * W + Math.floor(m.rx);
+    if (!!(HILL[mi] || STAIR[mi]) !== raised) continue;
     const al = 1 - (now - m.t) / CFG.markLife;
     ctx.strokeStyle = 'rgba(255,122,60,' + (al * .85).toFixed(3) + ')';
     const ca = Math.cos(m.a), sa = Math.sin(m.a);
@@ -2501,6 +2638,9 @@ function draw() {
     ctx.stroke();
   }
   ctx.lineCap = 'butt';
+  };
+  const drawMid = () => {
+  drawMarks(false);
   // the glow that shines ahead of the chaser (walls are drawn over it)
   if (mode !== 'menu' && mode !== 'edit' && c.state !== 'stun' && !noChaser && c.floor === vf) {
     const R = 3.4, half = 0.5;
@@ -2563,7 +2703,8 @@ function draw() {
       ctx.fillStyle = '#566468'; ctx.fillRect(-.3, -.3, .6, .22);                      // panel
       ctx.fillStyle = done ? '#4fd1b5' : '#e2503f'; ctx.beginPath(); ctx.arc(.2, .14, .11, 0, 7); ctx.fill();   // status light
       ctx.fillStyle = '#0e1213'; ctx.fillRect(-.34, .02, .36, .12);
-      ctx.fillStyle = done ? '#4fd1b5' : '#f0b648'; ctx.fillRect(-.34, .02, .36 * (done ? 1 : Math.min(1, s.prog / CFG.taskTime)), .12);
+      ctx.fillStyle = done ? '#4fd1b5' : s.regress ? '#e2503f' : '#f0b648'; ctx.fillRect(-.34, .02, .36 * (done ? 1 : Math.min(1, s.prog / CFG.taskTime)), .12);
+      if (s.regress && Math.floor(performance.now() / 180) % 2) { ctx.fillStyle = '#ffd24a'; ctx.fillRect(-.36, -.38, .09, .09); ctx.fillRect(.26, -.36, .07, .07); }   // sparks on a damaged box
     } else if (s.type === 'gate') {
       const open = s.state === 'open', locked = !open && mode !== 'edit' && mode !== 'menu' && tasksLeft() > 0;
       ctx.fillStyle = open ? '#1d4a3c' : locked ? '#2b2f31' : '#4a2a26'; ctx.fillRect(-.5, -.5, 1.02, 1.02);
@@ -2613,6 +2754,9 @@ function draw() {
     ctx.restore();
   }
 
+  // exit lines: dull until a gate is open, then lit
+  { const live = (mode === 'play' || mode === 'over') && allSpecials().some(s => s.type === 'gate' && s.state === 'open');
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (EXITL[y * W + x]) drawExitTile(x, y, !(EXITL[(y - 1) * W + x] || EXITL[(y + 1) * W + x]) || EXITL[y * W + x - 1] || EXITL[y * W + x + 1], live); }
   // staircases between the floors: steps, and an arrow for which way they take you
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (STAIR[y * W + x]) drawStairs(x, y, STAIR[y * W + x] - 1, curFloor === 0);
   // railings; on the ground floor, also the ones round the edge of a raised platform
@@ -2629,7 +2773,7 @@ function draw() {
     ctx.fillStyle = 'rgba(8,11,12,.6)'; ctx.fillRect(0, 0, W, H);
   }
   useFloor(vf);
-  drawBase(vf === 1); drawMid(); drawSolid(vf === 1);
+  drawBase(vf === 1); drawMid(); drawSolid(vf === 1); drawMarks(true);
 
   if ($('optPath').checked && c.path && mode === 'play') {
     ctx.strokeStyle = 'rgba(226,80,63,.5)'; ctx.lineWidth = .08; ctx.setLineDash([.25, .2]);
@@ -2657,8 +2801,8 @@ function draw() {
     const cMoving = mode === 'play' && (c.state === 'chase' || c.state === 'lunge' || c.state === 'cool' || c.state === 'vault');
     drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : c.state === 'lunge' ? '#ff6a55' : '#b3261a',
                '#2a1513', cMoving ? now * (c.state === 'cool' ? 6 : 16) : null, true, c.state === 'lunge');
-    if (c.state === 'break' || c.state === 'stun' || c.state === 'cool') {
-      const full = c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : CFG.hitCool;
+    if (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick') {
+      const full = c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : c.state === 'kick' ? CFG.kickTime : CFG.hitCool;
       ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .08; ctx.beginPath();
       ctx.arc(c.x, c.y, c.r + .2, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0, Math.min(1, c.t / full))); ctx.stroke();
     }
@@ -2676,6 +2820,9 @@ function draw() {
     ctx.stroke();
     if (hoverF && tool.startsWith('obj:') && OBJ_TYPES[tool.slice(4)] && objAtPos(MAPS[mapIdx], hoverF[0], hoverF[1]) < 0) {   // ghost of the car or crate
       ctx.globalAlpha = .6; drawObj({ t: tool.slice(4), x: snapHalf(hoverF[0]) + 1, y: snapHalf(hoverF[1]) + 1, a: objAngle }); ctx.globalAlpha = 1;
+    }
+    if (hover && tool === 'Z') {             // ghost of the five exit-line tiles
+      ctx.globalAlpha = .6; for (let k = -2; k <= 2; k++) drawExitTile(hover[0] + 1 + (exitVert ? 0 : k), hover[1] + 1 + (exitVert ? k : 0), !exitVert, true); ctx.globalAlpha = 1;
     }
     if (hover && tool === 'tri') {           // ghost of the half wall
       const cur = MAPS[mapIdx].rows[hover[1]][hover[0]], t = TRI_CHARS.includes(cur) && cur.length === 1 ? (TRI_CHARS.indexOf(cur) + 1) % 4 : triCorner;
@@ -2757,6 +2904,7 @@ let last = performance.now();
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   pollPad();
+  sndTick();
   $('touch').classList.toggle('hide', !(touchSeen && mode === 'play'));
   if (mode === 'play') { update(dt / 2); if (mode === 'play') update(dt / 2); }
   for (const f of floaters) f.t += dt; floaters = floaters.filter(f => f.t < 1.1);
@@ -2825,7 +2973,8 @@ $('edItem').addEventListener('change', e => {
       : v === 'U' ? 'Staircase: click to place one. It climbs up the screen (north) to start with; press R to turn it. You walk on at the bottom end and off at the top end upstairs; the other sides are closed. Then press "Upper floor" to build the floor above.'
       : v === 'D' ? 'Raised platform: drag to build a deck. It stands at upper-floor height, so it joins straight onto upper-floor tiles next to it. Reach it by Stairs tiles touching it or from the upper floor, and drop off any edge without a railing.'
       : v === 'A' ? 'Stairs: place next to a raised platform. They climb toward the platform, so walk on from the opposite side. You can add several sets.'
-      : v === 'H' ? 'Hatch: click to place. It opens once you have spent ' + CFG.hatchAfter + ' s in chase; stand on it and press the action button to escape.'
+      : v === 'Z' ? 'Exit line: click to lay five tiles in a row on empty floor (R turns it up-and-down). Put it beyond an exit gate. Once a gate is open, crossing the line escapes; with a line on the map, stepping through the gate alone no longer does.'
+      : v === 'H' ? 'Hatch: click to place. It opens once you have spent ' + hatchWait() + ' in chase; stand on it and press the action button to escape.'
       : v === '?' ? 'Random prop: click or drag over empty floor to scatter trees, rocks, crates, barrels and bushes.'
       : 'Click or drag to place. Right-drag erases.');
 });
@@ -2846,6 +2995,10 @@ $('edGroundFill').addEventListener('click', e => {
 $('stSave').addEventListener('click', e => { e.target.blur(); saveStamp(); });
 $('stDel').addEventListener('click', e => { e.target.blur(); deleteStamp(); });
 const doRotate = () => {
+  if (tool === 'Z') {              // exit line: across or up-and-down
+    exitVert = !exitVert; edMsg('Exit line now runs ' + (exitVert ? 'up and down' : 'left to right') + '. Click to place its five tiles.');
+    return;
+  }
   if (tool === 'tri') {            // which corner of the tile the half wall fills
     triCorner = (triCorner + 1) % 4;
     edMsg('Half wall now fills the ' + ['top-left', 'top-right', 'bottom-right', 'bottom-left'][triCorner] + ' corner. Click to place; click one already there to turn it.');
@@ -2879,7 +3032,7 @@ $('edW').addEventListener('change', resizeDrill);
 $('edH').addEventListener('change', resizeDrill);
 $('edClear').addEventListener('click', () => {
   if (ws) setTool('#');
-  const m = MAPS[mapIdx]; m.rows = m.rows.map(r => r.replace(/[#WPTKXBGEHJLSDAFNQV12]/g, '.')); saveCustom(); loadMap();
+  const m = MAPS[mapIdx]; m.rows = m.rows.map(r => r.replace(/[#WPTKXBGEHJLSDAFNQV12Z]/g, '.')); saveCustom(); loadMap();
 });
 $('edFloor0').addEventListener('click', e => { e.target.blur(); setEdFloor(0); });
 $('edFloor1').addEventListener('click', e => { e.target.blur(); setEdFloor(1); });
@@ -3092,6 +3245,151 @@ loadCustom();
 const sm = parseInt(store('lt_map'), 10); if (sm >= 0 && sm < MAPS.length) mapIdx = sm;
 const sd = store('lt_diff'); if (DIFF[sd]) diffKey = sd;
 buildDrills(); showMenu(); requestAnimationFrame(frame);
+
+/* ---------- Sound ----------
+   Everything is generated in the browser with the Web Audio API; there are no audio files.
+   Two layers: a quiet ambience (wind and a low drone) for the whole run, and a pulsing chase
+   track that fades in while the chaser is in chase and gets brighter the closer it is. */
+const snd = { ctx: null, on: true, vol: 0.6, next: 0, step: 0, wasChase: false };
+function sndInit() {
+  if (snd.ctx || !snd.on) return;
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  const c = snd.ctx = new AC(), sr = c.sampleRate;
+  snd.master = c.createGain(); snd.master.gain.value = snd.vol; snd.master.connect(c.destination);
+  // noise sources: a soft rumbly one for wind, a bright one for cymbal ticks
+  const soft = c.createBuffer(1, sr * 4, sr), sd = soft.getChannelData(0); let last = 0;
+  for (let i = 0; i < sd.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; sd[i] = last * 3.5; }
+  const bright = c.createBuffer(1, sr, sr), bd = bright.getChannelData(0);
+  for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
+  snd.bright = bright;
+  // ambience: wind that swells and shifts, over a low drone
+  snd.amb = c.createGain(); snd.amb.gain.value = 0; snd.amb.connect(snd.master);
+  const wind = c.createBufferSource(); wind.buffer = soft; wind.loop = true;
+  const wf = c.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 420; wf.Q.value = 0.6;
+  const wg = c.createGain(); wg.gain.value = 0.55;
+  const gust = c.createOscillator(); gust.frequency.value = 0.09; const gustAmt = c.createGain(); gustAmt.gain.value = 0.3; gust.connect(gustAmt); gustAmt.connect(wg.gain);
+  const drift = c.createOscillator(); drift.frequency.value = 0.05; const driftAmt = c.createGain(); driftAmt.gain.value = 180; drift.connect(driftAmt); driftAmt.connect(wf.frequency);
+  wind.connect(wf); wf.connect(wg); wg.connect(snd.amb); wind.start(); gust.start(); drift.start();
+  for (const [f, v] of [[55, 0.07], [55.6, 0.07], [110.4, 0.03], [164.8, 0.012]]) {
+    const o = c.createOscillator(); o.frequency.value = f; const g = c.createGain(); g.gain.value = v; o.connect(g); g.connect(snd.amb); o.start();
+  }
+  // Task box engine: a low hum with a soft rumble under it, swelling and easing in a smooth rhythm.
+  // (The rhythm is a rounded wave, not an on/off switch; switching it hard is what made it pop.)
+  snd.eng = c.createGain(); snd.eng.gain.value = 0; snd.eng.connect(snd.master);
+  snd.engOsc = c.createOscillator(); snd.engOsc.type = 'triangle'; snd.engOsc.frequency.value = 42;
+  const engF = c.createBiquadFilter(); engF.type = 'lowpass'; engF.frequency.value = 340; engF.Q.value = 0.5;
+  const chug = c.createGain(); chug.gain.value = 0.62;
+  snd.engLfo = c.createOscillator(); snd.engLfo.type = 'sine'; snd.engLfo.frequency.value = 4;
+  const chugAmt = c.createGain(); chugAmt.gain.value = 0.3; snd.engLfo.connect(chugAmt); chugAmt.connect(chug.gain);
+  const rumble = c.createBufferSource(); rumble.buffer = soft; rumble.loop = true;
+  const rumbleF = c.createBiquadFilter(); rumbleF.type = 'lowpass'; rumbleF.frequency.value = 180;
+  const rumbleG = c.createGain(); rumbleG.gain.value = 0.5;
+  snd.engOsc.connect(engF); engF.connect(chug); rumble.connect(rumbleF); rumbleF.connect(rumbleG); rumbleG.connect(chug);
+  chug.connect(snd.eng); snd.engOsc.start(); snd.engLfo.start(); rumble.start();
+  // Gate siren: a low tone that rises and falls slowly while its loudness pulses, heard while you are opening an exit gate.
+  snd.siren = c.createGain(); snd.siren.gain.value = 0; snd.siren.connect(snd.master);
+  const sirOsc = c.createOscillator(); sirOsc.type = 'triangle'; sirOsc.frequency.value = 150;
+  const sweep = c.createOscillator(); sweep.frequency.value = 0.45; const sweepAmt = c.createGain(); sweepAmt.gain.value = 28; sweep.connect(sweepAmt); sweepAmt.connect(sirOsc.frequency);
+  const pulse = c.createGain(); pulse.gain.value = 0.6;
+  const pulseLfo = c.createOscillator(); pulseLfo.frequency.value = 1.6; const pulseAmt = c.createGain(); pulseAmt.gain.value = 0.4; pulseLfo.connect(pulseAmt); pulseAmt.connect(pulse.gain);
+  const sirF = c.createBiquadFilter(); sirF.type = 'lowpass'; sirF.frequency.value = 600;
+  sirOsc.connect(sirF); sirF.connect(pulse); pulse.connect(snd.siren); sirOsc.start(); sweep.start(); pulseLfo.start();
+  // chase track: everything goes through one filter that opens up as the chaser closes in
+  snd.chase = c.createGain(); snd.chase.gain.value = 0;
+  snd.lp = c.createBiquadFilter(); snd.lp.type = 'lowpass'; snd.lp.frequency.value = 900;
+  snd.chase.connect(snd.lp); snd.lp.connect(snd.master);
+}
+// one shaped note: an oscillator with a volume envelope
+function sndNote(t, type, freq, dur, vol, attack, dest, endFreq) {
+  const c = snd.ctx, o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + dur * 0.6);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(dest || snd.chase); o.start(t); o.stop(t + dur + 0.05);
+}
+function sndTick2(t, vol, dur) {           // a short bright noise tick
+  const c = snd.ctx, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = snd.bright; f.type = 'highpass'; f.frequency.value = 6500;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(snd.chase); s.start(t); s.stop(t + dur + 0.02);
+}
+// The chase track: two bars of sixteen steps. Low thump on every beat, a restless bass line, and a held clash of two close notes.
+const SND_BASS = [73.42, 73.42, 87.31, 73.42, 55, 73.42, 98, 87.31, 73.42, 73.42, 87.31, 73.42, 58.27, 73.42, 65.41, 82.41];
+function sndStep(step, t, tier, stepDur) {
+  const up = Math.pow(2, tier / 12), bar = step >> 4, s = step & 15;     // each momentum tier lifts the whole track a semitone
+  if (s % 4 === 0 || (tier >= 2 && s === 14)) sndNote(t, 'sine', 130, 0.28, 0.9, 0.004, null, 42);
+  if (s % 2 === 0) sndNote(t, 'sawtooth', SND_BASS[(step >> 1) & 15] * up, stepDur * 1.8, 0.22, 0.01);
+  if (s % 4 === 2 || (tier >= 1 && s % 2 === 1)) sndTick2(t, s % 4 === 2 ? 0.16 : 0.07, 0.05);
+  if (s === 0) {
+    const pair = bar ? [277.18, 293.66] : [293.66, 311.13];
+    for (const f of pair) for (const det of [0.997, 1.003]) sndNote(t, 'sawtooth', f * up * det, stepDur * 16, 0.045, stepDur * 6);
+  }
+}
+function sndVault() {                      // the clatter of going over a window or pallet at a run
+  const c = snd.ctx; if (!c || !snd.on) return;
+  const t = c.currentTime, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = snd.bright; f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.8;
+  g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+  s.connect(f); f.connect(g); g.connect(snd.master); s.start(t); s.stop(t + 0.25);
+  sndNote(t, 'sine', 150, 0.22, 0.6, 0.004, snd.master, 60);
+  sndNote(t + 0.07, 'triangle', 320, 0.12, 0.2, 0.003, snd.master, 180);
+}
+function sndPallet() {                     // a plank of wood slamming down: a sharp crack, a heavy thud, then a smaller bounce
+  const c = snd.ctx; if (!c || !snd.on) return;
+  const t = c.currentTime;
+  const crack = (at, vol, freq, len) => {
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = snd.bright; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 1.4;
+    g.gain.setValueAtTime(vol, at); g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    s.connect(f); f.connect(g); g.connect(snd.master); s.start(at); s.stop(at + len + 0.02);
+  };
+  crack(t, 0.9, 1900, 0.07); crack(t, 0.5, 700, 0.12);
+  sndNote(t, 'sine', 170, 0.26, 0.9, 0.003, snd.master, 62);            // the weight of it hitting the ground
+  sndNote(t, 'triangle', 410, 0.09, 0.3, 0.002, snd.master, 300);       // the hollow knock of wood
+  crack(t + 0.14, 0.3, 1500, 0.05); sndNote(t + 0.14, 'triangle', 380, 0.07, 0.14, 0.002, snd.master, 290);   // bounce
+  sndNote(t + 0.14, 'sine', 130, 0.14, 0.3, 0.003, snd.master, 70);
+}
+function sndSting(t) {                     // the jolt when a chase begins
+  sndNote(t, 'sawtooth', 220, 1.1, 0.16, 0.01, snd.master, 104);
+  sndNote(t, 'sawtooth', 233.1, 1.1, 0.16, 0.01, snd.master, 110);
+  sndNote(t, 'sine', 90, 0.7, 0.8, 0.005, snd.master, 38);
+}
+function sndTick() {
+  const c = snd.ctx; if (!c) return;
+  const t = c.currentTime, playing = mode === 'play' && snd.on;
+  const chasing = playing && !$('optNoChaser').checked && chaser.inChase;
+  snd.master.gain.setTargetAtTime(snd.on ? snd.vol : 0, t, 0.05);
+  snd.amb.gain.setTargetAtTime(playing ? (chasing ? 0.16 : 0.4) : 0, t, 0.6);             // kept low, and lower still under the music
+  snd.chase.gain.setTargetAtTime(chasing ? 0.8 : 0, t, chasing ? 0.12 : 0.8);
+  // Task box engine: only heard within 8 m of a box that has been started, louder the closer you are,
+  // and chugging faster and higher the nearer it is to done. A finished box runs smoothly.
+  let loud = 0, prog = 0;
+  if (playing) for (const s of specials) {
+    if (s.type !== 'task' || (s.prog <= 0 && s.state !== 'done')) continue;
+    const d = Math.hypot(runner.x - s.x - .5, runner.y - s.y - .5); if (d >= CFG.engineRange) continue;
+    const v = Math.pow(1 - d / CFG.engineRange, 1.4);
+    if (v > loud) { loud = v; prog = s.state === 'done' ? 1 : Math.min(1, s.prog / CFG.taskTime); }
+  }
+  snd.siren.gain.setTargetAtTime(playing && now - (runner.gateT || -9) < 0.25 ? 0.3 : 0, t, 0.12);   // only while the gate is actually being opened
+  snd.eng.gain.setTargetAtTime(loud * 0.5, t, 0.15);
+  snd.engLfo.frequency.setTargetAtTime(3.5 + prog * 11, t, 0.2);
+  snd.engOsc.frequency.setTargetAtTime(42 + prog * 48, t, 0.2);
+  if (!chasing) { snd.wasChase = false; return; }
+  const near = Math.max(0, Math.min(1, 1 - Math.hypot(runner.x - chaser.x, runner.y - chaser.y) / 14));
+  snd.lp.frequency.setTargetAtTime(650 + near * near * 4200, t, 0.25);
+  const stepDur = 60 / (128 + chaser.tier * 6) / 4;
+  if (!snd.wasChase) { sndSting(t); snd.next = t + 0.3; snd.step = 0; snd.wasChase = true; }
+  if (snd.next < t) snd.next = t + 0.02;                                                   // came back from a pause: don't play a backlog
+  while (snd.next < t + 0.14) { sndStep(snd.step, snd.next, chaser.tier, stepDur); snd.next += stepDur; snd.step = (snd.step + 1) & 31; }
+}
+// Browsers only allow sound after you have pressed or tapped something.
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { sndInit(); if (snd.ctx && snd.ctx.state === 'suspended') snd.ctx.resume(); }, true);
+document.addEventListener('visibilitychange', () => { if (snd.ctx) { if (document.hidden) snd.ctx.suspend(); else if (snd.on) snd.ctx.resume(); } });
+snd.on = store('lt_optSound') !== '0'; $('optSound').checked = snd.on;
+$('optSound').addEventListener('change', e => { snd.on = e.target.checked; store('lt_optSound', snd.on ? '1' : '0'); e.target.blur(); if (snd.on) { sndInit(); if (snd.ctx) snd.ctx.resume(); } });
+snd.vol = Math.max(0, Math.min(1, (parseInt(store('lt_vol'), 10) >= 0 ? parseInt(store('lt_vol'), 10) : 60) / 100)); $('optVol').value = Math.round(snd.vol * 100);
+$('optVol').addEventListener('input', e => { snd.vol = e.target.value / 100; store('lt_vol', String(e.target.value)); });
+$('optVol').addEventListener('change', e => e.target.blur());
 
 // When served from a web address, register the service worker so the game can be installed and played offline.
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

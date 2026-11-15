@@ -1,0 +1,3012 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loop Trainer</title>
+<style>
+  :root {
+    --bg: #0e1213; --panel: #151b1d; --panel2: #1b2326; --line: #263135;
+    --text: #d9e2e0; --dim: #8a9a98; --accent: #f0b648; --teal: #4fd1b5; --red: #e2503f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  #app { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 18px 16px;
+    overflow-y: auto; }
+  h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: .5px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim);
+    margin: 18px 0 8px; }
+  .drill { display: block; width: 100%; text-align: left; background: var(--panel2);
+    border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 9px 11px;
+    margin-bottom: 6px; cursor: pointer; font: inherit; }
+  .drill:hover { border-color: #3a4a4f; }
+  .drill.on { border-color: var(--accent); background: #262419; }
+  .drill b { display: block; }
+  .drill small { color: var(--dim); }
+  .drill .best { float: right; color: var(--accent); font-size: 12px; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .seg button { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 0; cursor: pointer; font: inherit; }
+  .seg button.on { border-color: var(--accent); color: var(--accent); background: #262419; }
+  label.chk { display: flex; gap: 8px; align-items: center; margin: 6px 0; cursor: pointer;
+    color: var(--text); }
+  label.chk input { accent-color: var(--accent); }
+  kbd { background: #0b0f10; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 5px; padding: 1px 6px; font: 12px Consolas, monospace; }
+  ul.keys, ul.tips { list-style: none; padding: 0; margin: 0; }
+  ul.keys li { display: flex; justify-content: space-between; margin: 5px 0; color: var(--dim); }
+  ul.tips li { color: var(--dim); margin: 7px 0; padding-left: 12px; border-left: 2px solid var(--line); }
+  ul.tips li b { color: var(--text); }
+  main { position: relative; display: flex; flex-direction: column; min-width: 0; }
+  #hud { display: flex; gap: 26px; align-items: center; padding: 10px 18px;
+    border-bottom: 1px solid var(--line); background: var(--panel); min-height: 52px; }
+  .stat { display: flex; flex-direction: column; }
+  .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--dim); }
+  .stat .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pips { display: flex; gap: 5px; height: 22px; align-items: center; }
+  .pip { width: 22px; height: 9px; border-radius: 3px; background: #2a3538; }
+  .pip.hp.on { background: var(--teal); }
+  .pip.mo.on { background: var(--red); }
+  .hide { display: none !important; }
+  #padStatus { font-size: 12px; color: var(--dim); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #padStatus.ok { color: var(--teal); border-color: #2c5a50; }
+  #edbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 18px;
+    border-bottom: 1px solid var(--line); background: var(--panel); min-height: 52px; }
+  #dataBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #dataMsg { font-size: 12px; color: var(--accent); margin-top: 6px; }
+  #dataMsg:empty { display: none; }
+  #edbar button, #drillBtns button, #dataBtns button { background: var(--panel2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; }
+  #edbar button.on { border-color: var(--accent); color: var(--accent); background: #262419; }
+  #edbar button.primary { border-color: var(--teal); color: var(--teal); }
+  #edbar input, #edbar select { background: #0b0f10; border: 1px solid var(--line); color: var(--text);
+    border-radius: 6px; padding: 6px 8px; font: inherit; }
+  #edbar input[type=number] { width: 62px; }
+  #edbar label { color: var(--dim); }
+  #edbar .hint { color: var(--dim); font-size: 12px; flex-basis: 100%; }
+  #edbar .hint b { color: var(--text); font-weight: 600; }
+  #edMsg { color: var(--accent) !important; min-height: 0; }
+  #edMsg:empty { display: none; }
+  #tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  #floors { display: flex; gap: 0; }
+  #floors button { border-radius: 0; }
+  #floors button:first-child { border-radius: 8px 0 0 8px; }
+  #floors button:last-child { border-radius: 0 8px 8px 0; border-left: 0; }
+  #floors button.on { border-color: var(--teal) !important; color: var(--teal) !important; background: #17302b !important; }
+  #drillBtns { display: flex; gap: 6px; margin-top: 4px; }
+  .drill .tag { color: var(--teal); font-size: 11px; margin-left: 6px; font-weight: 400; }
+  #msg { margin-left: auto; color: var(--accent); font-weight: 600; }
+  #wrap { position: relative; flex: 1; min-height: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #touch { position: absolute; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #stickZone { position: absolute; left: 0; top: 0; width: 55%; height: 100%; touch-action: none; }
+  #stickBase { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%;
+    border: 2px solid rgba(217,226,224,.35); background: rgba(217,226,224,.08); pointer-events: none; }
+  #stickKnob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; border-radius: 50%;
+    background: rgba(79,209,181,.7); transform: translate(-50%, -50%); }
+  #touch button { position: absolute; border-radius: 50%; border: 2px solid rgba(217,226,224,.4);
+    background: rgba(21,27,29,.6); color: var(--text); font: 600 13px "Segoe UI", system-ui, sans-serif;
+    touch-action: none; user-select: none; -webkit-user-select: none; }
+  #tAct { right: 22px; bottom: 26px; width: 96px; height: 96px; border-color: var(--accent) !important; color: var(--accent) !important; }
+  #tAct:active { background: rgba(240,182,72,.3); }
+  #tRun { right: 132px; bottom: 22px; width: 68px; height: 68px; }
+  #tRun.on { border-color: var(--teal); color: var(--teal); }
+  #menuBtn { display: none; position: fixed; top: 8px; right: 8px; z-index: 30; background: var(--panel2);
+    border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 11px; font: inherit; cursor: pointer; }
+  @media (max-width: 820px) {
+    #app { grid-template-columns: 1fr; }
+    aside { display: none; position: fixed; inset: 0; z-index: 20; border-right: 0; padding-top: 50px; }
+    aside.open { display: block; }
+    #menuBtn { display: block; }
+    #hud { gap: 14px; padding-right: 86px; flex-wrap: wrap; }
+    #edbar { padding-right: 86px; }
+    .stat .v { font-size: 15px; }
+  }
+  #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 11, 12, .72); }
+  #overlay.hide { display: none; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 24px 28px; width: min(520px, 90%); box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .card h3 { margin: 0 0 4px; font-size: 22px; }
+  .card .big { font-size: 44px; font-weight: 700; color: var(--accent);
+    font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .card .rank { color: var(--teal); font-weight: 600; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin: 12px 0; }
+  .grid div { display: flex; justify-content: space-between; color: var(--dim);
+    border-bottom: 1px dashed var(--line); padding: 3px 0; }
+  .grid div b { color: var(--text); }
+  .coach { background: var(--panel2); border-left: 3px solid var(--accent); border-radius: 6px;
+    padding: 9px 12px; margin: 6px 0; font-size: 13px; }
+  .go { margin-top: 14px; color: var(--dim); }
+</style>
+</head>
+<body>
+<button id="menuBtn">☰ Menu</button>
+<div id="app">
+  <aside>
+    <h1>Loop <span>Trainer</span></h1>
+    <div class="sub">Top-down chase practice. Survive as long as you can.</div>
+
+    <h2>Drill</h2>
+    <div id="drills"></div>
+    <div id="drillBtns"></div>
+
+    <h2>Chaser</h2>
+    <div class="seg" id="diff">
+      <button data-d="easy">Easy</button>
+      <button data-d="normal">Normal</button>
+      <button data-d="hard">Hard</button>
+    </div>
+
+    <h2>Training aids</h2>
+    <label class="chk"><input type="checkbox" id="optAura"> See chaser through walls</label>
+    <label class="chk"><input type="checkbox" id="optPath"> Show chaser's planned route</label>
+    <label class="chk"><input type="checkbox" id="optNoChaser"> No chaser (explore the map)</label>
+
+    <h2>Move drills &amp; stamps between browsers</h2>
+    <div id="dataBtns">
+      <button data-a="export">Export file</button><button data-a="copy">Copy</button>
+      <button data-a="import">Import file</button><button data-a="paste">Paste</button>
+    </div>
+    <input type="file" id="dataFile" accept=".json,application/json" class="hide">
+    <div id="dataMsg"></div>
+
+    <h2>Controls</h2>
+    <ul class="keys">
+      <li><span>Move</span><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></li>
+      <li><span>Run / walk</span><kbd>Shift</kbd></li>
+      <li><span>Vault (hold) / drop pallet</span><kbd>Space</kbd></li>
+      <li><span>Restart</span><kbd>R</kbd></li>
+    </ul>
+    <ul class="keys">
+      <li><span>Controller: move</span><span>Left stick / D-pad</span></li>
+      <li><span>Controller: run / walk</span><span>Any bumper or trigger</span></li>
+      <li><span>Controller: vault / drop</span><kbd>A</kbd></li>
+      <li><span>Controller: restart</span><span><kbd>Y</kbd> or Start</span></li>
+      <li><span>Touch</span><span>Drag left side; buttons right</span></li>
+    </ul>
+    <div id="padStatus"></div>
+    <label class="chk"><input type="checkbox" id="optShiftRun"> Hold Shift to run (off: Shift walks)</label>
+
+    <h2>What to practise</h2>
+    <ul class="tips">
+      <li><b>Hug corners.</b> Every bit of slack you leave is distance the chaser gets for free.</li>
+      <li><b>Read the red glow.</b> It shines ahead of the chaser even when a wall hides them. If it turns around, so should you.</li>
+      <li><b>Running leaves scratch marks.</b> The chaser hunts by sight: it chases when it sees you or a scratch mark, and follows the freshest mark it can see. Walk and the trail goes cold.</li>
+      <li><b>Run straight at windows</b> for about a metre to get the fast vault. Angled approaches are slow.</li>
+      <li><b>Three vaults jams a window.</b> Leave after two.</li>
+      <li><b>Don't over-stay.</b> The chaser builds momentum (speed) the longer a chase goes without a hit, a stun or a pallet break.</li>
+      <li><b>Pallets are a budget.</b> Loop until the last safe lap, then drop it. Stuns are a bonus, not the goal.</li>
+    </ul>
+  </aside>
+
+  <main>
+    <div id="hud">
+      <div class="stat"><span class="k">Chase time</span><span class="v" id="hTime">0.0</span></div>
+      <div class="stat"><span class="k">Health</span><span class="pips" id="hHp"></span></div>
+      <div class="stat"><span class="k">Chaser dist</span><span class="v" id="hDist">–</span></div>
+      <div class="stat"><span class="k">Momentum</span><span class="pips" id="hMo"></span></div>
+      <div class="stat hide" id="hTaskBox"><span class="k">Tasks</span><span class="v" id="hTasks">0/0</span></div>
+      <div class="stat"><span class="k">Best</span><span class="v" id="hBest">–</span></div>
+      <div id="msg"></div>
+    </div>
+    <div id="edbar" class="hide">
+      <div id="tools">
+        <button data-t="#">1 Wall</button><button data-t="W">2 Window</button><button data-t="P">3 Pallet</button>
+        <button data-t=".">4 Erase</button><button data-t="R">5 Your start</button><button data-t="C">6 Chaser start</button>
+        <button data-t="select">7 Select structure</button><button data-t="outline">8 Map outline</button>
+        <button data-t="floor">9 Floor tile</button><button data-t="rail">Railing</button><button data-t="tri">Half wall</button>
+      </div>
+      <div id="floors"><button id="edFloor0" class="on">Ground floor</button><button id="edFloor1">Upper floor</button></div>
+      <select id="edItem">
+        <option value="">Place an item…</option>
+        <option value="E">Exit gate</option>
+        <option value="H">Hatch</option>
+        <option value="J">Task box (gates stay locked until all are done)</option>
+        <option value="L">Locker (hide inside)</option>
+        <option value="T">Tree</option>
+        <option value="K">Rock (4+ touching make a hill)</option>
+        <option value="S">Rock slope (the way up a rock hill)</option>
+        <option value="D">Raised platform</option>
+        <option value="A">Stairs (the way up a platform)</option>
+        <option value="U">Staircase to the upper floor</option>
+        <option value="X">Crate</option>
+        <option value="crate">Large crate (turns diagonally)</option>
+        <option value="car">Car (turns diagonally)</option>
+        <option value="B">Burn barrel (see over it, glows)</option>
+        <option value="G">Bush (walk through, hides you)</option>
+        <option value="?">Random prop</option>
+      </select>
+      <select id="edGround"></select>
+      <button id="edGroundFill" class="hide">Fill all</button>
+      <select id="edStamp"></select>
+      <button id="edRot">Rotate (R)</button>
+      <button id="edMir">Mirror (M)</button>
+      <input id="stName" type="text" maxlength="30" placeholder="Stamp name">
+      <button id="stSave">Save stamp</button>
+      <button id="stDel">Delete stamp</button>
+      <input id="edName" type="text" maxlength="30" placeholder="Drill name">
+      <label>Width <input type="number" id="edW" min="12" max="120"></label>
+      <label>Height <input type="number" id="edH" min="8" max="80"></label>
+      <button id="edOutSave" class="primary hide">Save outline</button>
+      <button id="edOutClear" class="hide">Clear outline</button>
+      <button id="edClear">Clear</button>
+      <button id="edTest" class="primary">Test run</button>
+      <button id="edDone">Done</button>
+      <div class="hint" id="edMsg"></div>
+      <div class="hint"><b>Paint:</b> left-drag paints, right-drag erases; windows and pallets go in a one-tile gap in a wall.
+        <b>Stamps:</b> pick one and click to place (R rotates, M mirrors). To save your own, use Select structure and click it (Shift-click adds or removes another piece; dragging a box takes every tile inside), type a name and Save stamp — an existing name is overwritten.
+        <b>Map outline:</b> drag corner-to-corner for a box of any size, or draw a closed shape in several strokes, then press Save outline. Everything else saves automatically.</div>
+    </div>
+    <div id="wrap">
+      <canvas id="cv"></canvas>
+      <div id="touch" class="hide">
+        <div id="stickZone"></div>
+        <div id="stickBase" class="hide"><div id="stickKnob"></div></div>
+        <button id="tRun" class="on">RUN</button>
+        <button id="tAct">ACTION</button>
+      </div>
+      <div id="overlay"><div class="card" id="card"></div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+/* ---------- Drills: # wall, W window, P pallet, R you, C chaser ---------- */
+const MAPS = [
+  { id: 'pallets', name: 'Pallet Basics', desc: 'Two simple pallet loops', rows: [
+    '..............................',
+    '..............................',
+    '..............................',
+    '.....#######P#######..........',
+    '..............................',
+    '..............................',
+    '..R...........................',
+    '..............................',
+    '...........########...........',
+    '...........#..................',
+    '...........P..................',
+    '...........#..................',
+    '...........########.......C...',
+    '..............................',
+    '..............................',
+  ]},
+  { id: 'windows', name: 'Window Work', desc: 'Fast vaults and wall reads', rows: [
+    '................................',
+    '................................',
+    '....#####W######................',
+    '....#...........................',
+    '....#...........................',
+    '....#...........................',
+    '....#...............#...........',
+    '....................#...........',
+    '..R.................W...........',
+    '....................#...........',
+    '............#########.....C.....',
+    '................................',
+    '................................',
+    '.......###W####.................',
+    '..............#.................',
+    '..............#.................',
+    '................................',
+  ]},
+  { id: 'workshop', name: 'The Workshop', desc: 'A building with two windows', rows: [
+    '....................................',
+    '....................................',
+    '.........###########W####...........',
+    '.........#..............#...........',
+    '.........#..............#...........',
+    '.........W..............P...........',
+    '.........#..............#...........',
+    '.........#..............#...........',
+    '.........#####.##########...........',
+    '....................................',
+    '....................................',
+    '...R......####P####..........C......',
+    '....................................',
+    '....................................',
+  ]},
+  { id: 'gauntlet', name: 'Gauntlet', desc: 'Chain everything together', rows: [
+    '............................................',
+    '............................................',
+    '....######W#####..........#######P######....',
+    '....#.....................#.................',
+    '....#.....................#.................',
+    '....#..........#..........W.................',
+    '...............#..........#.................',
+    '...............P.......................#....',
+    '...............#.......................#....',
+    '.......................................W....',
+    '..........................##P###.......#....',
+    '....####P####..........................#....',
+    '.....................R......................',
+    '............................................',
+    '....#.............#####W#####.......####....',
+    '....#.............#.........#..........#....',
+    '....W.............#.........#..........P....',
+    '....#.............P.........W..........#....',
+    '....#.............#.........#..........#....',
+    '....#######.......####.######.......####....',
+    '............................................',
+    '.......................................C....',
+    '............................................',
+  ]},
+];
+
+const CFG = {
+  runnerSpeed: 4.0, walkSpeed: 2.26, boostSpeed: 6.0, boostTime: 1.8,
+  markLife: 7, markGap: 0.4,
+  gateTime: 8, hatchAfter: 60,   // seconds of holding to open a gate; seconds in chase before the hatch opens
+  taskTime: 10,                  // seconds of holding to finish one task box
+  fastVault: 0.5, slowVault: 0.9,
+  chaserVault: 1.7, breakTime: 2.6, stunTime: 2.0,
+  lungeSpeed: 6.9, lungeTime: 0.45, hitRange: 1.0,
+  missCool: 1.5, hitCool: 2.7,
+  jamVaults: 3, jamTime: 14,
+};
+const DIFF = {
+  // turn: how sharply the chaser can corner (rad/s); slack: extra room it leaves around walls
+  easy:   { speed: 4.4, trig: 1.9,  fake: 0,    tiers: [20, 32, 44], turn: 5,  slack: 0.3 },
+  normal: { speed: 4.6, trig: 2.15, fake: 0.22, tiers: [15, 25, 35], turn: 7,  slack: 0.2 },
+  hard:   { speed: 4.6, trig: 2.3,  fake: 0.5,  tiers: [12, 20, 28], turn: 10, slack: 0.08 },
+};
+
+/* ---------- State ---------- */
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let mapIdx = 0, diffKey = 'normal';
+let W = 0, H = 0, G = null, VOID = null, spec = [], specials = [];
+let GROUND = [];
+const groundAt = (x, y) => GROUND[Math.floor(y) * W + Math.floor(x)];
+let SIGHT = null, PROP = [], hatchSaid = false;   // what blocks sight (1 always, 2 only from afar); prop letter per cell
+const STRUCT_RE = /[#WPTKXBGEHJLSDAFNQV12]/;                 // anything placed on the map: walls, windows, pallets, items
+const PROPS = 'TKXBG';
+let runner, chaser, stats, now = 0, mode = 'menu';
+let floaters = [], flash = 0, msgT = 0, marks = [];
+let distBuf, prevBuf;
+let FL = [], AIR = new Uint8Array(0), STAIR = new Uint8Array(0), curFloor = 0, edFloor = 0;
+let RAIL = new Uint8Array(0), EDGE = new Uint8Array(0), DECK = new Uint8Array(0), ASTAIR = new Uint8Array(0), edgeAny = false;
+// Staircases between floors come in four letters, one per direction they climb: north, east, south, west.
+// Sides of a tile are numbered the same way, and stored as bits 1, 2, 4, 8.
+const STAIR_CHARS = 'UIMY', STAIR_DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+const isStairCh = ch => typeof ch === 'string' && ch.length === 1 && STAIR_CHARS.includes(ch);
+// Free-standing objects that can sit at any of eight angles, so they are not tied to the tile grid.
+// hl / hw are half the length and half the width, in tiles.
+const OBJ_TYPES = {
+  car: { hl: 1.45, hw: 0.7, name: 'Car' },   // about 3 tiles long and 1.4 wide
+  crate: { hl: 0.85, hw: 0.65, name: 'Large crate' },
+};
+let OBJS = [], PBLOCK = new Uint8Array(0);
+// If a circle at (x, y) overlaps the object, returns where it should be pushed to; otherwise null.
+function obbPush(o, x, y, r) {
+  const dx = x - o.x, dy = y - o.y;
+  if (dx * dx + dy * dy > (r + o.rad) * (r + o.rad)) return null;
+  const lx = dx * o.c + dy * o.s, ly = -dx * o.s + dy * o.c;            // the circle, in the object's own frame
+  const qx = Math.max(-o.hl, Math.min(lx, o.hl)), qy = Math.max(-o.hw, Math.min(ly, o.hw));
+  const ex = lx - qx, ey = ly - qy, d2 = ex * ex + ey * ey;
+  if (d2 >= r * r) return null;
+  let px, py;
+  if (d2 > 1e-9) { const d = Math.sqrt(d2), k = (r - d) / d; px = lx + ex * k; py = ly + ey * k; }
+  else {                                                                // centre inside it: leave by the nearest face
+    const mx = o.hl - Math.abs(lx), my = o.hw - Math.abs(ly);
+    if (mx < my) { px = (lx < 0 ? -1 : 1) * (o.hl + r); py = ly; } else { px = lx; py = (ly < 0 ? -1 : 1) * (o.hw + r); }
+  }
+  return [o.x + px * o.c - py * o.s, o.y + px * o.s + py * o.c];
+}
+// Half-triangle walls: a wall filling half a tile, split corner to corner. The letter says which corner is solid.
+const TRI_CHARS = 'FNQV';   // north-west, north-east, south-east, south-west
+let TRI = new Uint8Array(0), DPAL = [];
+const triVerts = (t, cx, cy) => t === 1 ? [cx, cy, cx + 1, cy, cx, cy + 1] : t === 2 ? [cx, cy, cx + 1, cy, cx + 1, cy + 1]
+  : t === 3 ? [cx + 1, cy, cx + 1, cy + 1, cx, cy + 1] : [cx, cy, cx + 1, cy + 1, cx, cy + 1];
+const inTri = (t, u, v) => t === 1 ? u + v < 1 : t === 2 ? u > v : t === 3 ? u + v > 1 : v > u;   // u, v: position inside the tile, 0 to 1
+function segClosest(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+  return [ax + dx * t, ay + dy * t];
+}
+// If a circle at (x, y) overlaps the triangle on tile (cx, cy), returns where to push it to; otherwise null.
+function triPush(t, cx, cy, x, y, r) {
+  const V = triVerts(t, cx, cy); let best = null, bd = 1e9;
+  for (let k = 0; k < 3; k++) {
+    const a = k * 2, b = ((k + 1) % 3) * 2, q = segClosest(x, y, V[a], V[a + 1], V[b], V[b + 1]), d = Math.hypot(x - q[0], y - q[1]);
+    if (d < bd) { bd = d; best = q; }
+  }
+  if (x >= cx && x <= cx + 1 && y >= cy && y <= cy + 1 && inTri(t, x - cx, y - cy)) {   // centre inside: out through the nearest face
+    const l = bd || 1e-6; return [best[0] + (best[0] - x) / l * r, best[1] + (best[1] - y) / l * r];
+  }
+  if (bd >= r || bd < 1e-9) return null;
+  return [best[0] + (x - best[0]) / bd * r, best[1] + (y - best[1]) / bd * r];
+}
+// Diagonal pallets lie corner to corner across a tile: 1 runs bottom-left to top-right, 2 runs top-left to bottom-right.
+const diagEnds = s => s.diag === 1 ? [s.x + .06, s.y + .94, s.x + .94, s.y + .06] : [s.x + .06, s.y + .06, s.x + .94, s.y + .94];
+const diagNormal = s => s.diag === 1 ? [.7071, .7071] : [.7071, -.7071];   // points across the pallet
+function segPush(x, y, R, ax, ay, bx, by) {
+  const q = segClosest(x, y, ax, ay, bx, by), d = Math.hypot(x - q[0], y - q[1]);
+  if (d >= R) return null;
+  if (d < 1e-6) { const nx = -(by - ay), ny = bx - ax, l = Math.hypot(nx, ny) || 1; return [q[0] + nx / l * R, q[1] + ny / l * R]; }
+  return [q[0] + (x - q[0]) / d * R, q[1] + (y - q[1]) / d * R];
+}
+const EW = 0.06;   // half the thickness of a railing
+// calls fn with the rectangle of each barrier on tile (cx, cy)
+function edgeRects(cx, cy, mask, fn) {
+  if (mask & 1) fn(cx, cy - EW, cx + 1, cy + EW);
+  if (mask & 2) fn(cx + 1 - EW, cy, cx + 1 + EW, cy + 1);
+  if (mask & 4) fn(cx, cy + 1 - EW, cx + 1, cy + 1 + EW);
+  if (mask & 8) fn(cx - EW, cy, cx + EW, cy + 1);
+}
+const keys = new Set(); let spacePressed = false;
+
+function store(k, v) {
+  try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }
+  catch (e) { return null; }
+}
+const bestKey = (m, d) => 'lt_best_' + MAPS[m].id + '_' + d;
+const getBest = (m, d) => parseFloat(store(bestKey(m, d))) || 0;
+
+/* ---------- Map ---------- */
+function loadMap() {
+  const m = MAPS[mapIdx];
+  // raised platforms stand at upper-floor height, so a drill that has any needs an upper floor to put them on
+  if (!m.up && m.rows.some(r => /[DA]/.test(r))) ensureUp(m);
+  if (m.up) ensureUp(m);
+  // Floor 0 is the ground floor. A drill may also have an upper floor of the same size.
+  // (While the editor is showing the upper floor the two are swapped in the drill, so swap them back here.)
+  const pairs = [[m.rows, groundRows(m), railRows(m)]];
+  if (m.up) { pairs.push([m.up.rows, m.up.ground, m.up.rail]); if (m.swapped) pairs.reverse(); }
+  const w = Math.max(...pairs[0][0].map(r => r.length));
+  W = w + 2; H = pairs[0][0].length + 2; hatchSaid = false; FL = [];
+  let rs = [2.5, 2.5], cs = [W - 2.5, H - 2.5];
+  for (let f = 0; f < pairs.length; f++) {
+  const rows = pairs[f][0], gr = pairs[f][1], rl = pairs[f][2], lowRows = pairs[0][0];
+  G = new Uint8Array(W * H); VOID = new Uint8Array(W * H); spec = new Array(W * H); specials = [];
+  SIGHT = new Uint8Array(W * H); PROP = new Array(W * H);
+  GROUND = new Array(W * H); AIR = new Uint8Array(W * H); STAIR = new Uint8Array(W * H);
+  RAIL = new Uint8Array(W * H); EDGE = new Uint8Array(W * H); DECK = new Uint8Array(W * H); ASTAIR = new Uint8Array(W * H);
+  TRI = new Uint8Array(W * H); PBLOCK = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (x === 0 || y === 0 || x === W - 1 || y === H - 1) { G[i] = 1; SIGHT[i] = 1; continue; }
+    let ch = (rows[y - 1][x - 1]) || '.';
+    RAIL[i] = parseInt((rl[y - 1] || '')[x - 1] || '0', 16) || 0;   // railings: one bit per side (N, E, S, W)
+    if (f === 1 && ch === '~') {
+      if (lowRows[y - 1][x - 1] === 'D') { DECK[i] = 1; ch = '.'; }                           // a platform below is floor up here
+      else if (FL[0].ASTAIR[i]) { STAIR[i] = FL[0].STAIR[i]; ASTAIR[i] = 1; ch = '.'; }        // and this is the top of its stairs
+    }
+    if (ch === '#' || ch === 'O') { G[i] = 1; SIGHT[i] = 1; }   // 'O' is a wall that belongs to the map outline
+    else if (ch === '~' && f === 1) {   // upper floor: open air. You drop through it, unless something solid is underneath
+      const B = FL[0]; VOID[i] = 1; AIR[i] = 1; G[i] = (B.G[i] === 1 || blocking(B.spec[i]) || B.HILL[i]) ? 1 : 0;
+    }
+    else if (ch === '~') { G[i] = 1; SIGHT[i] = 1; VOID[i] = 1; }   // outside the map's outline: blocks like a wall, drawn as nothing
+    else if (isStairCh(ch)) STAIR[i] = 1 + STAIR_CHARS.indexOf(ch);   // staircase between the floors; the letter says which way it climbs
+    else if ('TKXBSDA'.includes(ch)) {   // tree, rock, crate, barrel, rock slope, platform, platform stairs: solid here
+      G[i] = 1; PROP[i] = ch; if (ch !== 'B' && ch !== 'D' && ch !== 'A') SIGHT[i] = 1;   // barrels and platforms are low enough to see over
+    } else if (ch === 'G') { PROP[i] = ch; SIGHT[i] = 2; }            // bush: walk through it, hides you from a distance
+    else if (ch === 'E' || ch === 'H' || ch === 'J' || ch === 'L') {
+      const s = { type: ch === 'E' ? 'gate' : ch === 'H' ? 'hatch' : ch === 'J' ? 'task' : 'locker', x, y, axis: 'x', state: 'closed', prog: 0,
+                  vaults: 0, jamUntil: 0, lastVault: -99, checkedT: -99 };
+      spec[i] = s; specials.push(s); if (ch === 'E' || ch === 'L') SIGHT[i] = 1;
+    }
+    else if (ch.length === 1 && TRI_CHARS.includes(ch)) { TRI[i] = 1 + TRI_CHARS.indexOf(ch); PBLOCK[i] = 1; }   // half-triangle wall
+    else if (ch === '1' || ch === '2') {                            // a pallet lying diagonally
+      const s = { type: 'pallet', diag: +ch, x, y, axis: 'x', state: 'up', vaults: 0, jamUntil: 0, lastVault: -99 };
+      spec[i] = s; specials.push(s);
+    }
+    else if (ch === 'W' || ch === 'P') {
+      const s = { type: ch === 'W' ? 'window' : 'pallet', x, y, axis: 'x', state: 'up',
+                  vaults: 0, jamUntil: 0, lastVault: -99 };
+      spec[i] = s; specials.push(s);
+    } else if (ch === 'R' && f === 0) rs = [x + .5, y + .5];
+    else if (ch === 'C' && f === 0) cs = [x + .5, y + .5];
+    const gch = gr[y - 1][x - 1];
+    if (gch && gch !== '.') { GROUND[i] = gch; if (gch === 'c' && !SIGHT[i]) SIGHT[i] = 2; }   // corn hides like a bush
+  }
+  // the automatic border is invisible wherever it only touches empty outside space
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (x > 0 && y > 0 && x < W - 1 && y < H - 1) continue;
+    let touches = false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, ny = y + dy;
+      // an outline wall is already the edge, so it doesn't need the border behind it either
+      if (nx > 0 && ny > 0 && nx < W - 1 && ny < H - 1 && !VOID[ny * W + nx] && rows[ny - 1][nx - 1] !== 'O') touches = true;
+    }
+    if (!touches) VOID[y * W + x] = 1;
+  }
+  // travel axis: walls left+right means you cross it vertically
+  for (const s of specials)
+    s.axis = (G[s.y * W + s.x - 1] === 1 && G[s.y * W + s.x + 1] === 1) ? 'y' : 'x';
+
+  // Rock hills: four or more rocks touching become one mound you can walk onto from its ramp side
+  // (west if there is open ground there, otherwise south, east, north) and drop off from any edge.
+  // Raised ground comes in two families, each merged from touching tiles:
+  //   rock (K) with rock slopes (S), and platforms (D) with stairs (A).
+  // You can only get up by a slope or stairs tile, and you can drop off any edge.
+  // A group of 4+ rocks with no slope placed still gets one automatically (west side first).
+  HILL = new Int16Array(W * H); RAMP = new Uint8Array(W * H); RDX = new Int8Array(W * H); RDY = new Int8Array(W * H); hills = [null];
+  const seenK = new Uint8Array(W * H), SIDES = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+  const fam = ch => ch === 'K' || ch === 'S' ? 1 : 0;   // (platforms are no longer low mounds: they are part of the upper floor)
+  for (let s0 = 0; s0 < W * H; s0++) {
+    const f = fam(PROP[s0]); if (!f || seenK[s0]) continue;
+    const comp = [], st = [s0]; seenK[s0] = 1;
+    while (st.length) {
+      const i = st.pop(); comp.push(i);
+      for (const j of [i - 1, i + 1, i - W, i + W]) if (fam(PROP[j]) === f && !seenK[j]) { seenK[j] = 1; st.push(j); }
+    }
+    const set = new Set(comp), open = j => !set.has(j) && G[j] !== 1 && !spec[j] && !HILL[j];
+    let ramp = comp.filter(i => PROP[i] === 'S' || PROP[i] === 'A');
+    for (const i of ramp) {
+      // the low end faces open ground, preferably with the rest of the group behind it
+      const d = SIDES.find(([dx, dy]) => open(i + dy * W + dx) && set.has(i - dy * W - dx)) ||
+                SIDES.find(([dx, dy]) => open(i + dy * W + dx)) || SIDES.find(([dx, dy]) => !set.has(i + dy * W + dx)) || SIDES[0];
+      RDX[i] = d[0]; RDY[i] = d[1];
+    }
+    if (f === 1 && !ramp.length) {
+      if (comp.length < 4) continue;                      // a few loose rocks stay as plain solid rocks
+      for (const [dx, dy] of SIDES) {
+        ramp = comp.filter(i => open(i + dy * W + dx));
+        if (ramp.length) { for (const i of ramp) { RDX[i] = dx; RDY[i] = dy; } break; }
+      }
+      if (!ramp.length) continue;                         // boxed in on every side: nowhere to put a slope
+    }
+    const id = hills.length; hills.push({ family: f });
+    for (const i of comp) { HILL[i] = id; G[i] = 0; SIGHT[i] = 0; }   // low enough to see over
+    for (const i of ramp) RAMP[i] = 1;
+  }
+  // Platform stairs work as a staircase to the upper level, climbing toward the platform they touch.
+  if (f === 0) for (let i = 0; i < W * H; i++) if (PROP[i] === 'A') {
+    const d = STAIR_DIRS.findIndex(([dx, dy]) => PROP[i + dy * W + dx] === 'D');
+    if (d < 0) continue;                                   // not touching a platform: just a solid block
+    STAIR[i] = d + 1; ASTAIR[i] = 1; G[i] = 0; SIGHT[i] = 0; PROP[i] = undefined;
+  }
+  // Thin barriers on tile edges: railings, plus the sides of every staircase.
+  // A staircase is open only at the end you use: the bottom on the ground floor, the top upstairs.
+  edgeAny = false;
+  for (let i = 0; i < W * H; i++) {
+    EDGE[i] = RAIL[i];
+    if (STAIR[i]) { const d = STAIR[i] - 1, open = f === 0 ? (d + 2) % 4 : d; EDGE[i] |= 15 & ~(1 << open); }
+    if (EDGE[i]) edgeAny = true;
+  }
+  // Cars and large crates (ground floor only). They collide by their true shape; PBLOCK marks the tiles
+  // they cover so the chaser's route-finding goes round them.
+  OBJS = []; DPAL = specials.filter(s => s.diag);
+  if (f === 0) for (const o of (Array.isArray(m.objs) ? m.objs : [])) {
+    const T = OBJ_TYPES[o.t]; if (!T) continue;
+    const ang = (o.a || 0) * Math.PI / 4;
+    const ob = { t: o.t, x: o.x + 1, y: o.y + 1, a: o.a || 0, c: Math.cos(ang), s: Math.sin(ang), hl: T.hl, hw: T.hw, rad: Math.hypot(T.hl, T.hw) };
+    OBJS.push(ob);
+    for (let cy = Math.max(1, Math.floor(ob.y - ob.rad - 1)); cy <= Math.min(H - 2, Math.ceil(ob.y + ob.rad + 1)); cy++)
+      for (let cx = Math.max(1, Math.floor(ob.x - ob.rad - 1)); cx <= Math.min(W - 2, Math.ceil(ob.x + ob.rad + 1)); cx++)
+        if (obbPush(ob, cx + .5, cy + .5, 0.42)) PBLOCK[cy * W + cx] = 1;
+  }
+  FL.push({ G, VOID, SIGHT, PROP, GROUND, HILL, RAMP, RDX, RDY, spec, specials, hills, AIR, STAIR, RAIL, EDGE, DECK, ASTAIR, edgeAny, OBJS, PBLOCK, TRI, DPAL });
+  }
+  useFloor(0);
+  // distBuf must be 64-bit: 32-bit rounding made the search skip cells. One entry per tile per floor.
+  distBuf = new Float64Array(W * H * FL.length); prevBuf = new Int32Array(W * H * FL.length);
+
+  runner = { x: rs[0], y: rs[1], r: 0.3, hp: 2, boost: 0, face: 0, vault: null,
+             lastDx: 0, lastDy: 0, headT: 0, vx: 0, vy: 0, running: false, lastRunT: -9, markDist: 0,
+             hidden: null, hideFrom: null, slowT: 0, hill: 0, onRamp: false };
+  marks = []; selSet.clear();
+  chaser = { x: cs[0], y: cs[1], r: 0.36, state: 'chase', t: 0, face: Math.PI, dx: 0, dy: 0,
+             path: null, repath: 0, cell: -1, prevCell: -1, chaseT: 0, fakeUntil: -9, fakeCell: -1,
+             sees: true, target: null, vault: null, tier: 0,
+             kx: cs[0], ky: cs[1], tracked: false, saw: false, inChase: false, lastLeadT: -9, markT: -9,
+             onLead: false, arriveT: -9, lastSawT: -9, lockerTarget: null, lockPt: null, slowT: 0, hill: 0, onRamp: false };
+  stats = { time: 0, stuns: 0, drops: 0, earlyDrops: 0, fast: 0, slow: 0, dodges: 0,
+            vaultHits: 0, jams: 0, maxTier: 0, breaks: 0, palletHits: 0, closest: 99, lost: 0, chase: 0, chases: 0, tasks: 0, hides: 0, grabs: 0 };
+  runner.floor = 0; runner.stairLock = false;
+  chaser.floor = 0; chaser.stairLock = false; chaser.kf = 0; chaser.kvia = -1;   // kf: the floor it thinks you are on
+  now = 0; floaters = []; flash = 0;
+  resize();
+}
+
+/* ---------- Floors ---------- */
+// Each floor has its own set of map arrays. useFloor points the working variables at one of them,
+// so everything that reads the map (collision, sight, items) acts on that floor.
+function useFloor(f) {
+  const F = FL[f] || FL[0]; if (!F) return;
+  ({ G, VOID, SIGHT, PROP, GROUND, HILL, RAMP, RDX, RDY, spec, specials, hills, AIR, STAIR, RAIL, EDGE, DECK, ASTAIR, edgeAny, OBJS, PBLOCK, TRI, DPAL } = F);
+  curFloor = FL[f] ? f : 0;
+}
+const allSpecials = () => FL.length > 1 ? FL[0].specials.concat(FL[1].specials) : specials;
+// the upper floor of a drill, created empty (all open air) the first time it is needed and kept the same size as the ground floor
+function ensureUp(m) {
+  const h = m.rows.length, w = Math.max(...m.rows.map(r => r.length));
+  if (!m.up) m.up = { rows: [], ground: [] };
+  const fit = (g, fill) => { g = Array.isArray(g) ? g : []; return g.length === h && g.every(r => r.length === w) ? g
+    : Array.from({ length: h }, (_, y) => (g[y] || '').substring(0, w).padEnd(w, fill)); };
+  m.up.rows = fit(m.up.rows, m.swapped ? '.' : '~'); m.up.ground = fit(m.up.ground, '.'); m.up.rail = fit(m.up.rail, '0');
+  return m.up;
+}
+// Taking stairs, or stepping off the edge of the upper floor.
+function switchFloor(e, f, stairs) {
+  const from = e.floor; e.floor = f; e.stairLock = stairs; e.hill = 0; e.onRamp = false; useFloor(f);
+  if (e !== runner) return;
+  const c = chaser, d = Math.hypot(c.x - e.x, c.y - e.y);
+  if (c.floor === from && (c.saw || (c.inChase && d < 9))) {       // it saw or heard which way you went
+    c.kf = f; c.kx = e.x; c.ky = e.y; c.kvia = -1; c.lastLeadT = now; c.onLead = true; c.repath = 0;
+  } else if (stairs && e.running) {                                // scratch marks lead onto the stairs
+    marks.push({ x: e.x, y: e.y, a: e.face, t: now, rx: e.x, ry: e.y, f: from, via: true });
+  }
+  say(f ? 'Upper floor' : 'Ground floor');
+}
+function floorCheck(e, stagger) {
+  if (FL.length < 2) return;
+  const i = Math.floor(e.y) * W + Math.floor(e.x);
+  if (STAIR[i] && FL[1 - e.floor].STAIR[i]) {
+    // The lower half of the flight belongs to the ground floor and the upper half to the floor above,
+    // so you change floor as you pass the middle, and can turn round part-way.
+    const [dx, dy] = STAIR_DIRS[STAIR[i] - 1];
+    const t = (e.x - Math.floor(e.x) - .5) * dx + (e.y - Math.floor(e.y) - .5) * dy;
+    if (e.floor === 0 && t > 0.06) switchFloor(e, 1, true); else if (e.floor === 1 && t < -0.06) switchFloor(e, 0, true);
+  }
+  if (e.floor === 1 && AIR[Math.floor(e.y) * W + Math.floor(e.x)]) {
+    switchFloor(e, 0, false); e.slowT = stagger; floatText(e.x, e.y - .6, 'drop', '#8a9a98');
+  }
+}
+
+const blocking = s => !!s && (s.type === 'window' || (s.state === 'down' && !s.diag) || s.type === 'task' || s.type === 'locker' || (s.type === 'gate' && s.state !== 'open'));
+const tasksLeft = () => allSpecials().filter(s => s.type === 'task' && s.state !== 'done').length;
+const hatchOpen = () => stats.chase >= CFG.hatchAfter;
+const isSolid = (cx, cy) => {
+  if (cx < 0 || cy < 0 || cx >= W || cy >= H) return true;
+  const i = cy * W + cx;
+  if (HILL[i]) return !(RAMP[i] || HILL[i] === passHill);   // a rock hill: only its ramp lets you on, unless you are already up there
+  return G[i] === 1 || blocking(spec[i]);
+};
+let HILL = new Int16Array(0), RAMP = new Uint8Array(0), RDX = new Int8Array(0), RDY = new Int8Array(0), hills = [null], passHill = 0;
+const hillAt = (x, y) => HILL[Math.floor(y) * W + Math.floor(x)] || 0;
+
+function resolve(e) {
+  passHill = hillAt(e.x, e.y);
+  resolveInner(e);
+  passHill = 0;
+}
+function resolveInner(e) {
+  const r = e.r;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const o of OBJS) { const p = obbPush(o, e.x, e.y, r); if (p) { e.x = p[0]; e.y = p[1]; } }   // cars and large crates
+    for (const s of DPAL) if (s.state === 'down') {                                                    // dropped diagonal pallets
+      const E = diagEnds(s), p = segPush(e.x, e.y, r + .1, E[0], E[1], E[2], E[3]); if (p) { e.x = p[0]; e.y = p[1]; }
+    }
+    for (let cy = Math.floor(e.y - r); cy <= Math.floor(e.y + r); cy++) for (let cx = Math.floor(e.x - r); cx <= Math.floor(e.x + r); cx++) {
+      const t = cx >= 0 && cy >= 0 && cx < W && cy < H ? TRI[cy * W + cx] : 0; if (!t) continue;      // half-triangle walls
+      const p = triPush(t, cx, cy, e.x, e.y, r); if (p) { e.x = p[0]; e.y = p[1]; }
+    }
+    const x0 = Math.floor(e.x - r), x1 = Math.floor(e.x + r);
+    const y0 = Math.floor(e.y - r), y1 = Math.floor(e.y + r);
+    for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+      if (!isSolid(cx, cy)) continue;
+      const nx = Math.max(cx, Math.min(e.x, cx + 1)), ny = Math.max(cy, Math.min(e.y, cy + 1));
+      const dx = e.x - nx, dy = e.y - ny, d2 = dx * dx + dy * dy;
+      if (d2 >= r * r) continue;
+      if (d2 > 1e-9) { const d = Math.sqrt(d2); e.x += dx / d * (r - d); e.y += dy / d * (r - d); }
+      else {
+        const l = e.x - cx, rr = cx + 1 - e.x, t = e.y - cy, b = cy + 1 - e.y, m = Math.min(l, rr, t, b);
+        if (m === l) e.x = cx - r; else if (m === rr) e.x = cx + 1 + r;
+        else if (m === t) e.y = cy - r; else e.y = cy + 1 + r;
+      }
+    }
+    if (!edgeAny) continue;
+    // railings and staircase sides
+    const ex0 = Math.max(0, Math.floor(e.x - r - .1)), ex1 = Math.min(W - 1, Math.floor(e.x + r + .1));
+    const ey0 = Math.max(0, Math.floor(e.y - r - .1)), ey1 = Math.min(H - 1, Math.floor(e.y + r + .1));
+    for (let cy = ey0; cy <= ey1; cy++) for (let cx = ex0; cx <= ex1; cx++) {
+      const mk = EDGE[cy * W + cx]; if (!mk) continue;
+      edgeRects(cx, cy, mk, (ax, ay, bx, by) => {
+        const nx = Math.max(ax, Math.min(e.x, bx)), ny = Math.max(ay, Math.min(e.y, by));
+        const dx = e.x - nx, dy = e.y - ny, d2 = dx * dx + dy * dy;
+        if (d2 >= r * r) return;
+        if (d2 > 1e-9) { const d = Math.sqrt(d2); e.x += dx / d * (r - d); e.y += dy / d * (r - d); }
+        else if (bx - ax > by - ay) e.y = e.y < (ay + by) / 2 ? ay - r : by + r;   // dead centre: step off to the nearer side
+        else e.x = e.x < (ax + bx) / 2 ? ax - r : bx + r;
+      });
+    }
+  }
+}
+
+function blockedAt(x, y, r) {
+  for (const o of OBJS) if (obbPush(o, x, y, r)) return true;
+  for (const s of DPAL) if (s.state === 'down') { const E = diagEnds(s); if (segPush(x, y, r + .1, E[0], E[1], E[2], E[3])) return true; }
+  for (let cy = Math.floor(y - r); cy <= Math.floor(y + r); cy++) for (let cx = Math.floor(x - r); cx <= Math.floor(x + r); cx++) {
+    const t = cx >= 0 && cy >= 0 && cx < W && cy < H ? TRI[cy * W + cx] : 0;
+    if (t && triPush(t, cx, cy, x, y, r)) return true;
+  }
+  const x0 = Math.floor(x - r), x1 = Math.floor(x + r), y0 = Math.floor(y - r), y1 = Math.floor(y + r);
+  for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+    if (!isSolid(cx, cy)) continue;
+    const nx = Math.max(cx, Math.min(x, cx + 1)), ny = Math.max(cy, Math.min(y, cy + 1));
+    if ((x - nx) ** 2 + (y - ny) ** 2 < r * r) return true;
+  }
+  if (edgeAny) {
+    let hit = false;
+    const ex0 = Math.max(0, Math.floor(x - r - .1)), ex1 = Math.min(W - 1, Math.floor(x + r + .1));
+    const ey0 = Math.max(0, Math.floor(y - r - .1)), ey1 = Math.min(H - 1, Math.floor(y + r + .1));
+    for (let cy = ey0; cy <= ey1 && !hit; cy++) for (let cx = ex0; cx <= ex1 && !hit; cx++) {
+      const mk = EDGE[cy * W + cx]; if (!mk) continue;
+      edgeRects(cx, cy, mk, (ax, ay, bx, by) => {
+        const nx = Math.max(ax, Math.min(x, bx)), ny = Math.max(ay, Math.min(y, by));
+        if ((x - nx) ** 2 + (y - ny) ** 2 < r * r) hit = true;
+      });
+    }
+    if (hit) return true;
+  }
+  return false;
+}
+function walkClear(ax, ay, bx, by, r) {
+  const d = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(d / 0.2));
+  passHill = hillAt(ax, ay);
+  for (let i = 1; i <= n; i++) {
+    const t = i / n; if (blockedAt(ax + (bx - ax) * t, ay + (by - ay) * t, r)) { passHill = 0; return false; }
+  }
+  passHill = 0;
+  return true;
+}
+// sight line: walls and tall props block it (you can see through windows and over pallets and barrels);
+// a bush only hides things that are more than 3 m apart
+function los(ax, ay, bx, by) {
+  const d = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(d / 0.15));
+  for (let i = 1; i < n; i++) {
+    const t = i / n, sx = ax + (bx - ax) * t, sy = ay + (by - ay) * t, ci = Math.floor(sy) * W + Math.floor(sx), v = SIGHT[ci];
+    if (v === 1 || (v === 2 && d > 3)) return false;
+    if (TRI[ci] && inTri(TRI[ci], sx - Math.floor(sx), sy - Math.floor(sy))) return false;   // the solid half of a triangle wall
+  }
+  return true;
+}
+
+/* ---------- Pathfinding (Dijkstra; vaulting and breaking cost time) ---------- */
+const DIRS = [[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
+function hpush(h, d, i) {
+  h.push([d, i]); let k = h.length - 1;
+  while (k > 0) { const p = (k - 1) >> 1; if (h[p][0] <= h[k][0]) break; [h[p], h[k]] = [h[k], h[p]]; k = p; }
+}
+function hpop(h) {
+  const top = h[0], last = h.pop();
+  if (h.length) {
+    h[0] = last; let k = 0;
+    for (;;) {
+      const l = 2 * k + 1, r = l + 1; let m = k;
+      if (l < h.length && h[l][0] < h[m][0]) m = l;
+      if (r < h.length && h[r][0] < h[m][0]) m = r;
+      if (m === k) break; [h[m], h[k]] = [h[k], h[m]]; k = m;
+    }
+  }
+  return top;
+}
+const along = (s, dx) => s.axis === 'x' ? dx !== 0 : dx === 0;
+const ROT_CH = { F: 'N', N: 'Q', Q: 'V', V: 'F', 1: '2', 2: '1' }, MIR_CH = { F: 'N', N: 'F', Q: 'V', V: 'Q', 1: '2', 2: '1' };   // how angled tiles change when turned or flipped
+function findPath(si, ti, pen) {
+  const speed = DIFF[diffKey].speed;
+  const vaultCost = CFG.chaserVault * speed, breakCost = CFG.breakTime * speed;
+  // A place is a tile on a floor, numbered floor * (tiles per floor) + tile. si, ti and the result use these numbers.
+  const N = W * H;
+  distBuf.fill(Infinity); prevBuf.fill(-1);
+  const h = []; distBuf[si] = 0; hpush(h, 0, si);
+  while (h.length) {
+    const [d, n] = hpop(h);
+    if (d > distBuf[n]) continue;
+    if (n === ti) break;
+    const f = (n / N) | 0, i = n - f * N, base = f * N, F = FL[f];
+    const relax = (to, cost) => { const nd = d + cost; if (nd < distBuf[to]) { distBuf[to] = nd; prevBuf[to] = n; hpush(h, nd, to); } };
+    if (FL.length > 1) {
+      if (F.STAIR[i] && FL[1 - f].STAIR[i]) relax((1 - f) * N + i, 1.5);   // take the staircase
+      if (f === 1 && F.AIR[i]) { relax(i, 1); continue; }                   // stepped off the upper floor: it drops
+    }
+    const x = i % W, y = (i / W) | 0, si_ = F.spec[i], bs = blocking(si_);
+    for (const [dx, dy, c] of DIRS) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const j = ny * W + nx; if (F.G[j] === 1) continue;
+      if (F.PBLOCK[j] && base + j !== ti) continue;   // under a car or large crate (the goal itself is still allowed)
+      const sj = F.spec[j], bj = blocking(sj);
+      if (sj && (sj.type === 'gate' || sj.type === 'task' || sj.type === 'locker')) continue;   // exits, task boxes and lockers are just obstacles to the chaser
+      const noClimb = k => F.HILL[k] && !F.RAMP[k] && F.HILL[k] !== F.HILL[i];   // can't step up a hill except by its ramp
+      if (noClimb(j)) continue;
+      // a railing or staircase side on the edge between two tiles stops a step across it
+      const barred = (p, q) => {
+        const sx = (q % W) - (p % W), sy = ((q / W) | 0) - ((p / W) | 0), side = sy < 0 ? 0 : sx > 0 ? 1 : sy > 0 ? 2 : 3;
+        return (F.EDGE[p] & (1 << side)) || (F.EDGE[q] & (1 << ((side + 2) % 4)));
+      };
+      if (dx && dy) {
+        if (bs || bj) continue;
+        const a = y * W + nx, b = ny * W + x;
+        if (noClimb(a) || noClimb(b)) continue;
+        if (F.edgeAny && (barred(i, a) || barred(a, j) || barred(i, b) || barred(b, j))) continue;
+        if (F.G[a] === 1 || F.G[b] === 1 || F.PBLOCK[a] || F.PBLOCK[b] || blocking(F.spec[a]) || blocking(F.spec[b])) continue;
+      } else {
+        if (bs && !along(si_, dx)) continue;
+        if (bj && !along(sj, dx)) continue;
+        if (F.edgeAny && barred(i, j)) continue;
+      }
+      let cost = c;
+      if (bj) cost += sj.type === 'window' ? vaultCost : breakCost;
+      if (si_ && si_.diag && si_.state === 'down') {
+        // Leaving a tile with a dropped diagonal pallet: if the way out is on the other side of it from the way in, it has to be broken.
+        const half = (ddx, ddy) => si_.diag === 1 ? Math.sign(ddx + ddy) : Math.sign(ddx - ddy);
+        const pv = prevBuf[n];
+        if (pv >= 0 && ((pv / N) | 0) === f) {
+          const pi = pv - base, hin = half((pi % W) - x, ((pi / W) | 0) - y), hout = half(dx, dy);
+          if (!hin || !hout || hin !== hout) cost += breakCost;
+        }
+      }
+      if (pen && pen[base + j]) cost += pen[base + j];
+      relax(base + j, cost);
+    }
+  }
+  if (distBuf[ti] === Infinity) return null;
+  const path = []; for (let i = ti; i !== -1; i = prevBuf[i]) path.push(i);
+  return path.reverse();
+}
+
+/* ---------- Feedback ---------- */
+function floatText(x, y, text, color) { floaters.push({ x, y, text, color, t: 0 }); }
+function say(text) { $('msg').textContent = text; msgT = 2.2; }
+
+/* ---------- Runner ---------- */
+// Movement comes from the keyboard, a controller's left stick / d-pad, or the on-screen touch stick.
+const pad = { x: 0, y: 0, a: false, run: false, start: false, on: false };
+const touch = { x: 0, y: 0, act: false, run: true, id: null, ox: 0, oy: 0 };
+let lastSrc = 'key';
+function inputDir() {
+  let x = 0, y = 0;
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) x--;
+  if (keys.has('KeyD') || keys.has('ArrowRight')) x++;
+  if (keys.has('KeyW') || keys.has('ArrowUp')) y--;
+  if (keys.has('KeyS') || keys.has('ArrowDown')) y++;
+  const l = Math.hypot(x, y);
+  if (l) { lastSrc = 'key'; return [x / l, y / l]; }
+  if (pad.x || pad.y) { lastSrc = 'pad'; return [pad.x, pad.y]; }
+  if (touch.x || touch.y) { lastSrc = 'touch'; return [touch.x, touch.y]; }
+  return [0, 0];
+}
+const actionHeld = () => keys.has('Space') || pad.a || touch.act;
+function pollPad() {
+  // Read every connected pad and combine them: some PCs list a second, idle device ahead of the real controller.
+  let pads = [], blocked = false;
+  try { pads = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(g => g && g.connected); }
+  catch (e) { blocked = true; }
+  const wasA = pad.a, wasStart = pad.start;
+  let x = 0, y = 0, a = false, run = false, start = false, active = false;
+  for (const gp of pads) {
+    const b = i => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.5));
+    let gx = gp.axes[0] || 0, gy = gp.axes[1] || 0;
+    if (Math.hypot(gx, gy) < 0.3) { gx = 0; gy = 0; }
+    if (b(14)) gx = -1; if (b(15)) gx = 1; if (b(12)) gy = -1; if (b(13)) gy = 1;   // d-pad
+    if (gx || gy) { x = gx; y = gy; }
+    a = a || b(0); run = run || b(4) || b(5) || b(6) || b(7); start = start || b(9) || b(3);
+    if (gx || gy || gp.buttons.some(q => q.pressed || q.value > 0.5) || Array.from(gp.axes).some(v => Math.abs(v) > 0.5)) active = true;
+  }
+  const l = Math.hypot(x, y); if (l) { x /= l; y /= l; }
+  pad.on = pads.length > 0; pad.x = x; pad.y = y; pad.a = a; pad.run = run; pad.start = start;
+  const status = blocked ? 'This browser is blocking controller access.'
+    : !navigator.getGamepads ? 'This browser has no controller support.'
+    : !pads.length ? 'No controller detected. Click the game, then press any button on the controller.'
+    : (active ? '● input received' : '○ connected, no input yet') +
+      (document.hasFocus() ? '' : '\n⚠ This window is not focused — click the game area, then try the controller.') +
+      pads.map(g => '\n' + g.id + '\n  layout: ' + (g.mapping || 'non-standard') +
+        ' · sticks: ' + Array.from(g.axes).map(v => v.toFixed(1)).join(' ') +
+        ' · buttons down: ' + (g.buttons.map((q, i) => q.pressed || q.value > 0.5 ? i : -1).filter(i => i >= 0).join(' ') || 'none')).join('');
+  if (status !== pad.status) { pad.status = status; $('padStatus').textContent = status; $('padStatus').classList.toggle('ok', pads.length > 0); }
+  if (mode === 'edit') return;
+  if (pad.a && !wasA) { lastSrc = 'pad'; if (mode === 'play') spacePressed = true; else startRun(); }
+  if (pad.start && !wasStart) startRun();
+}
+
+function nearestAction(dx, dy) {
+  // returns {s, kind:'vault'|'drop'|'jam'} for what Space would do right now
+  let best = null, bd = 9;
+  for (const s of specials) {
+    const cx = s.x + .5, cy = s.y + .5;
+    if (s.type === 'gate') {
+      const d = Math.hypot(runner.x - cx, runner.y - cy);
+      if (s.state !== 'open' && d < 1.5 && d < bd) { bd = d; best = { s, kind: tasksLeft() ? 'gateLocked' : 'gate' }; }
+      continue;
+    }
+    if (s.type === 'task') {
+      const d = Math.hypot(runner.x - cx, runner.y - cy);
+      if (s.state !== 'done' && d < 1.5 && d < bd) { bd = d; best = { s, kind: 'task' }; }
+      continue;
+    }
+    if (s.type === 'locker') {
+      const d = Math.hypot(runner.x - cx, runner.y - cy);
+      if (d < 1.4 && d < bd) { bd = d; best = { s, kind: 'locker' }; }
+      continue;
+    }
+    if (s.type === 'hatch') {
+      const d = Math.hypot(runner.x - cx, runner.y - cy);
+      if (d < 0.95 && d < bd) { bd = d; best = { s, kind: hatchOpen() ? 'hatch' : 'hatchShut' }; }
+      continue;
+    }
+    if (s.diag && s.state === 'down') {
+      // a dropped diagonal pallet: vault straight across it
+      const [nx, ny] = diagNormal(s), rx = runner.x - cx, ry = runner.y - cy;
+      const across = rx * nx + ry * ny, alongIt = rx * ny - ry * nx;
+      if (Math.abs(across) <= 1.05 && Math.abs(alongIt) <= 0.62) {
+        const toward = -Math.sign(across) * (dx * nx + dy * ny);
+        const d = Math.abs(across) - 5;
+        if (toward > 0.3 && d < bd) { bd = d; best = { s, kind: 'vault', toward, tx: cx - Math.sign(across) * nx * 0.8, ty: cy - Math.sign(across) * ny * 0.8 }; }
+      }
+      continue;
+    }
+    if (blocking(s)) {
+      const al = s.axis === 'x' ? runner.x - cx : runner.y - cy;
+      const lat = s.axis === 'x' ? runner.y - cy : runner.x - cx;
+      if (Math.abs(al) > 1.15 || Math.abs(lat) > 0.5) continue;
+      const toward = -Math.sign(al) * (s.axis === 'x' ? dx : dy);
+      if (toward <= 0.3) continue;
+      const d = Math.abs(al) - 5; // vaults win over drops
+      if (d < bd) { bd = d; best = { s, kind: (s.type === 'window' && now < s.jamUntil) ? 'jam' : 'vault', al, toward }; }
+    } else if (s.type === 'pallet' && s.state === 'up') {
+      const d = Math.hypot(runner.x - cx, runner.y - cy);
+      if (d < 1.35 && d < bd) { bd = d; best = { s, kind: 'drop' }; }
+    }
+  }
+  return best;
+}
+
+function dropPallet(s) {
+  s.state = 'down'; stats.drops++;
+  const cx = s.x + .5, cy = s.y + .5, c = chaser;
+  const cd = Math.hypot(c.x - runner.x, c.y - runner.y);
+  if (cd > 5) stats.earlyDrops++;
+  // stun if the chaser is under it
+  let nx = Math.max(s.x, Math.min(c.x, s.x + 1)), ny = Math.max(s.y, Math.min(c.y, s.y + 1));
+  if (s.diag) { const E = diagEnds(s); [nx, ny] = segClosest(c.x, c.y, E[0], E[1], E[2], E[3]); }   // a diagonal pallet only catches what is under its line
+  if (Math.hypot(c.x - nx, c.y - ny) < c.r + (s.diag ? 0.3 : 0.15) && c.state !== 'stun' && c.state !== 'vault' && c.floor === runner.floor) {
+    c.state = 'stun'; c.t = CFG.stunTime; c.chaseT = 0; stats.stuns++;
+    floatText(c.x, c.y - .8, 'STUN!', '#f0b648'); say('Pallet stun');
+  }
+  // push anyone standing in the gap out to one side
+  for (const e of c.floor === runner.floor ? [runner, c] : [runner]) {
+    const a = s.axis === 'x' ? e.x - cx : e.y - cy, lat = s.axis === 'x' ? e.y - cy : e.x - cx;
+    if (!s.diag && Math.abs(a) < .5 + e.r && Math.abs(lat) < .5 + e.r) {
+      let side = Math.sign(a) || 1;
+      if (e === runner && Math.abs(a) < .5) {
+        const mv = s.axis === 'x' ? runner.lastDx : runner.lastDy;
+        if (mv) side = Math.sign(mv);
+      }
+      const v = (s.axis === 'x' ? cx : cy) + side * (.5 + e.r + .02);
+      if (s.axis === 'x') e.x = v; else e.y = v;
+    }
+    resolve(e);
+  }
+  c.path = null; c.repath = 0;
+}
+
+function startRunnerVault(a) {
+  const s = a.s, cx = s.x + .5, cy = s.y + .5;
+  const fast = runner.running && a.toward > 0.85 && runner.headT >= 0.28;
+  if (runner.running) runner.lastRunT = now + (fast ? CFG.fastVault : CFG.slowVault);
+  const side = -Math.sign(a.al) * 0.9;
+  runner.vault = { fx: runner.x, fy: runner.y,
+    tx: a.tx !== undefined ? a.tx : s.axis === 'x' ? cx + side : cx, ty: a.ty !== undefined ? a.ty : s.axis === 'x' ? cy : cy + side,   // a diagonal pallet supplies its own landing spot
+    p: 0, dur: fast ? CFG.fastVault : CFG.slowVault };
+  if (fast) { stats.fast++; floatText(runner.x, runner.y - .6, 'fast vault', '#4fd1b5'); }
+  else { stats.slow++; floatText(runner.x, runner.y - .6, 'slow vault', '#8a9a98'); }
+  if (s.type === 'window') {
+    if (now - s.lastVault > 20) s.vaults = 0;
+    s.vaults++; s.lastVault = now;
+    if (s.vaults >= CFG.jamVaults) {
+      s.vaults = 0; s.jamUntil = now + CFG.jamTime; stats.jams++; say('Window jammed!');
+    }
+  }
+}
+
+// Dropping off a rock hill anywhere but its ramp costs a moment to land.
+function landCheck(e, stagger) {
+  const i = Math.floor(e.y) * W + Math.floor(e.x), h = HILL[i] || 0;
+  if (!h && e.hill && !e.onRamp) { e.slowT = stagger; floatText(e.x, e.y - .6, 'drop', '#8a9a98'); }
+  e.hill = h; e.onRamp = !!RAMP[i];
+}
+function enterLocker(s) {
+  const r = runner, c = chaser;
+  r.hideFrom = [r.x, r.y]; r.hidden = s; r.x = s.x + .5; r.y = s.y + .5; r.vx = r.vy = 0; r.running = false;
+  stats.hides++;
+  // if the chaser watched you get in, it walks straight over and opens the door
+  if (c.saw || (c.inChase && now - c.lastSawT < 1)) {
+    c.lockerTarget = s; c.lockPt = r.hideFrom.slice(); c.kx = c.lockPt[0]; c.ky = c.lockPt[1]; c.kf = r.floor; c.kvia = -1; c.repath = 0;
+    say('The chaser saw you hide!');
+  } else say('Hidden. Press the action button to get out.');
+}
+function leaveLocker() {
+  const r = runner; if (!r.hidden) return;
+  r.x = r.hideFrom[0]; r.y = r.hideFrom[1]; r.hidden = null;
+}
+function updateRunner(dt) {
+  const r = runner;
+  if (r.boost > 0) r.boost -= dt;
+  if (r.slowT > 0) r.slowT -= dt;
+  if (r.hidden) {                     // inside a locker: no moving until you step out
+    r.vx = r.vy = 0; r.running = false; r.headT = 0;
+    if (spacePressed) leaveLocker();
+    return;
+  }
+  if (r.vault) {
+    const v = r.vault; v.p += dt / v.dur;
+    const p = Math.min(1, v.p);
+    r.x = v.fx + (v.tx - v.fx) * p; r.y = v.fy + (v.ty - v.fy) * p;
+    if (v.p >= 1) r.vault = null;
+    return;
+  }
+  const [dx, dy] = inputDir();
+  const shift = keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.run;
+  // touch has its own Run/Walk toggle; keyboard and controller use the Shift / shoulder-button rule
+  r.running = !!(dx || dy) && (lastSrc === 'touch' ? touch.run : ($('optShiftRun').checked ? shift : !shift));
+  if (dx || dy) {
+    // compare rough headings so a slightly wobbly analog stick still counts as running straight
+    const hx = Math.abs(dx) < 0.3 ? 0 : Math.sign(dx), hy = Math.abs(dy) < 0.3 ? 0 : Math.sign(dy);
+    if (hx === r.headX && hy === r.headY) r.headT += dt; else r.headT = 0;
+    r.headX = hx; r.headY = hy;
+    r.lastDx = dx; r.lastDy = dy; r.face = Math.atan2(dy, dx);
+  } else { r.headT = 0; }
+  const a = nearestAction(dx, dy);
+  if (a) {
+    if (a.kind === 'vault' && actionHeld()) { startRunnerVault(a); return; }
+    if (a.kind === 'drop' && spacePressed) dropPallet(a.s);
+    if (a.kind === 'jam' && spacePressed) say('Jammed — find another route');
+    if (a.kind === 'hatch' && spacePressed) { endRun('hatch'); return; }
+    if (a.kind === 'hatchShut' && spacePressed) say('The hatch opens after ' + CFG.hatchAfter + ' s in chase');
+    if (a.kind === 'locker' && spacePressed) { enterLocker(a.s); return; }
+    if (a.kind === 'gateLocked' && spacePressed) { const n = tasksLeft(); say('Gate locked — ' + n + ' task' + (n === 1 ? '' : 's') + ' still to do'); }
+    if (a.kind === 'task' && actionHeld()) {
+      // working on a task roots you to the spot; progress is kept if you let go
+      a.s.prog += dt; r.vx = r.vy = 0; r.running = false; r.headT = 0;
+      r.face = Math.atan2(a.s.y + .5 - r.y, a.s.x + .5 - r.x);
+      if (a.s.prog >= CFG.taskTime) {
+        a.s.state = 'done'; stats.tasks++;
+        const n = tasksLeft();
+        say(n ? 'Task done — ' + n + ' to go. The chaser heard it!' : 'All tasks done — the gates can be opened. The chaser heard it!');
+        floatText(a.s.x + .5, a.s.y - .2, 'DONE', '#4fd1b5');
+        // finishing is loud: unless it is already chasing you, the chaser comes to look
+        if (!chaser.inChase) { chaser.kx = r.x; chaser.ky = r.y; chaser.kf = r.floor; chaser.kvia = -1; chaser.repath = 0; }
+      }
+      return;
+    }
+    if (a.kind === 'gate' && actionHeld()) {
+      // opening a gate roots you to the spot; progress is kept if you let go
+      a.s.prog += dt; r.vx = r.vy = 0; r.running = false; r.headT = 0;
+      r.face = Math.atan2(a.s.y + .5 - r.y, a.s.x + .5 - r.x);
+      if (a.s.prog >= CFG.gateTime) { a.s.state = 'open'; say('The gate is open — run through it!'); }
+      return;
+    }
+  }
+  const gHere = groundAt(r.x, r.y);
+  const sp = (!r.running ? CFG.walkSpeed : r.boost > 0 ? CFG.boostSpeed : CFG.runnerSpeed) * (GROUND_SPEED[gHere] || 1) * (r.slowT > 0 ? 0.45 : 1);
+  r.vx = dx * sp; r.vy = dy * sp;
+  r.x += r.vx * dt; r.y += r.vy * dt;
+  resolve(r);
+  floorCheck(r, 0.35);
+  landCheck(r, 0.3);
+  const here = spec[Math.floor(r.y) * W + Math.floor(r.x)];
+  if (here && here.type === 'gate' && here.state === 'open') { endRun('gate'); return; }
+  // running leaves scratch marks and walking leaves nothing, except that
+  // snow shows your footprints even at a walk and water washes all tracks away
+  if (r.running) r.lastRunT = now;
+  if (gHere !== 'w' && (r.running || (gHere === 's' && (dx || dy)))) {
+    r.markDist += sp * dt;
+    if (r.markDist >= CFG.markGap) {
+      r.markDist = 0;
+      marks.push({ x: r.x + (Math.random() - .5) * .7, y: r.y + (Math.random() - .5) * .7,
+                   a: r.face + (Math.random() - .5) * 1.4, t: now, rx: r.x, ry: r.y, f: r.floor });
+    }
+  }
+}
+
+/* ---------- Chaser ---------- */
+function hitRunner() {
+  const r = runner, c = chaser;
+  r.hp--; flash = 1;
+  if (r.vault) stats.vaultHits++;
+  for (const s of specials)
+    if (s.type === 'pallet' && s.state === 'up' && Math.hypot(s.x + .5 - r.x, s.y + .5 - r.y) < 1.8)
+      { stats.palletHits++; break; }
+  floatText(r.x, r.y - .7, 'HIT', '#e2503f');
+  c.state = 'cool'; c.t = CFG.hitCool; c.chaseT = 0;
+  for (const s of specials) s.vaults = 0;
+  if (r.hp <= 0) endRun(); else { r.boost = CFG.boostTime; say('Injured — one more hit ends the run'); }
+}
+
+function turnToward(c, tx, ty, rate, dt) {
+  const want = Math.atan2(ty, tx);
+  let d = want - c.face; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  const m = rate * dt; c.face += Math.max(-m, Math.min(m, d));
+}
+
+// choose somewhere to look: close by just after losing a lead, otherwise anywhere on the map
+function pickSearch(c, local) {
+  // a wider patrol sometimes goes to the other floor, if the drill has one
+  const f = !local && FL.length > 1 && Math.random() < 0.4 ? 1 - c.floor : c.floor, back = curFloor;
+  useFloor(f);
+  for (let i = 0; i < 30; i++) {
+    const sx = local ? c.x + (Math.random() - .5) * 14 : 1 + Math.random() * (W - 2);
+    const sy = local ? c.y + (Math.random() - .5) * 14 : 1 + Math.random() * (H - 2);
+    if (sx < 1 || sy < 1 || sx >= W - 1 || sy >= H - 1) continue;
+    if (isSolid(Math.floor(sx), Math.floor(sy)) || AIR[Math.floor(sy) * W + Math.floor(sx)] || PBLOCK[Math.floor(sy) * W + Math.floor(sx)]) continue;
+    if (!local && f === c.floor && Math.hypot(sx - c.x, sy - c.y) < 8 && i < 20) continue;
+    c.kx = sx; c.ky = sy; c.kf = f; c.kvia = -1; c.repath = 0; break;
+  }
+  useFloor(back);
+}
+
+function updateChaser(dt) {
+  const c = chaser, r = runner, D = DIFF[diffKey];
+  const dist = Math.hypot(r.x - c.x, r.y - c.y), same = r.floor === c.floor;   // on different floors it can neither see nor reach you
+  c.sees = same && los(c.x, c.y, r.x, r.y);
+  if (same) stats.closest = Math.min(stats.closest, dist);
+
+  // The chaser has to find you. It only gets a lead by seeing you or seeing a scratch mark.
+  // Out of chase it only notices things in front of it (or very close); in chase it sees all round.
+  const inArc = (x, y) => Math.cos(Math.atan2(y - c.y, x - c.x) - c.face) > 0.26;   // about 75 degrees each side
+  c.saw = c.sees && dist < 26 && (c.inChase || dist < 3 || inArc(r.x, r.y));
+  let lead = c.saw;
+  // Once a chase is on, it can also hear you running close by, so it can cut you off round a loop.
+  const heard = same && c.inChase && dist < 9 && now - r.lastRunT < 0.3;
+  if (c.saw) c.lastSawT = now;
+  if (c.saw || heard) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; }
+  else {
+    let best = null;
+    for (const m of marks) {
+      if ((m.f || 0) !== c.floor) continue;
+      if (m.t <= c.markT || now - m.t > CFG.markLife) continue;
+      const d = Math.hypot(m.x - c.x, m.y - c.y);
+      if (d > 10 || !(c.inChase || d < 3 || inArc(m.x, m.y)) || !los(c.x, c.y, m.rx, m.ry)) continue;
+      if (!best || m.t > best.t) best = m;
+    }
+    if (best) {   // follow the freshest mark it can see; a mark on a staircase means the trail carries on upstairs or down
+      c.kx = best.rx; c.ky = best.ry; c.kf = c.floor; c.kvia = best.via ? 1 - c.floor : -1; c.markT = best.t; lead = true;
+    }
+  }
+  if (lead) { c.lastLeadT = now; c.onLead = true; }
+  let arrived = c.floor === c.kf && Math.hypot(c.x - c.kx, c.y - c.ky) < 1.2;
+  if (!lead && arrived && c.kvia >= 0) { c.kf = c.kvia; c.kvia = -1; c.repath = 0; c.lastLeadT = now; arrived = false; }   // take the stairs after you
+  if (!lead && arrived && c.onLead) { c.onLead = false; c.arriveT = now; }
+  // The chase holds while it is still running to where it last had you (up to 8 s),
+  // then for 2 s of looking around once it gets there with nothing new to go on.
+  const was = c.inChase;
+  c.inChase = c.onLead ? now - c.lastLeadT < 8 : now - Math.max(c.lastLeadT, c.arriveT) < 2;
+  if (c.inChase && !was) { say('Chase!'); stats.chases++; }
+  if (!c.inChase && was) { say('The chaser lost you'); stats.lost++; c.chaseT = 0; }
+  if (c.inChase) stats.chase += dt;
+  c.tracked = c.inChase;
+  if (c.slowT > 0) c.slowT -= dt;
+  if (c.lockerTarget) {
+    // on its way to open a locker
+    const Lk = c.lockerTarget, dl = Math.hypot(c.x - (Lk.x + .5), c.y - (Lk.y + .5));
+    if (c.saw || Math.hypot(c.kx - c.lockPt[0], c.ky - c.lockPt[1]) > 0.1) c.lockerTarget = null;   // something else has its attention
+    else if (dl < 1.6 && c.state === 'chase') { c.state = 'check'; c.t = 1.2; c.face = Math.atan2(Lk.y + .5 - c.y, Lk.x + .5 - c.x); }
+  } else if (!lead && arrived) {
+    // Lost you: look in a locker close to where the trail went cold, then search around
+    const recent = now - Math.max(c.lastLeadT, c.arriveT) < 6;
+    let Lk = null, bd = 3.2;
+    if (recent) for (const s of specials) {
+      if (s.type !== 'locker' || now - s.checkedT < 20) continue;
+      const d = Math.hypot(c.x - (s.x + .5), c.y - (s.y + .5));
+      if (d < bd) { bd = d; Lk = s; }
+    }
+    let pt = null;
+    if (Lk) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const px = Lk.x + dx, py = Lk.y + dy;
+      if (!isSolid(px, py) && (!pt || Math.hypot(px + .5 - c.x, py + .5 - c.y) < Math.hypot(pt[0] - c.x, pt[1] - c.y))) pt = [px + .5, py + .5];
+    }
+    if (pt) { c.lockerTarget = Lk; c.lockPt = pt; c.kx = pt[0]; c.ky = pt[1]; c.kf = c.floor; c.kvia = -1; c.repath = 0; }
+    else { if (Lk) Lk.checkedT = now; pickSearch(c, recent); }
+  }
+
+  if (c.state === 'check') {            // opening a locker
+    c.t -= dt;
+    if (c.t <= 0) {
+      const Lk = c.lockerTarget; c.lockerTarget = null; c.state = 'chase'; c.path = null;
+      if (Lk) {
+        Lk.checkedT = now;
+        if (r.hidden === Lk) { leaveLocker(); stats.grabs++; hitRunner(); if (mode === 'play') say('Pulled out of the locker!'); }
+        else { floatText(Lk.x + .5, Lk.y - .2, 'empty', '#8a9a98'); pickSearch(c, true); }
+      }
+    }
+    return;
+  }
+  if (c.state === 'stun') { c.t -= dt; if (c.t <= 0) { c.state = 'chase'; c.path = null; } return; }
+  if (c.state === 'break') {
+    c.t -= dt;
+    if (c.t <= 0) { c.target.state = 'broken'; c.state = 'chase'; c.chaseT = 0; c.path = null; stats.breaks++; }
+    return;
+  }
+  if (c.state === 'vault') {
+    const v = c.vault; v.p += dt / CFG.chaserVault; const p = Math.min(1, v.p);
+    c.x = v.fx + (v.tx - v.fx) * p; c.y = v.fy + (v.ty - v.fy) * p;
+    if (v.p >= 1) { c.state = 'chase'; c.vault = null; c.path = null; }
+    return;
+  }
+  if (c.state === 'lunge') {
+    const l = dist || 1;
+    turnToward(c, (r.x - c.x) / l, (r.y - c.y) / l, 1.6, dt);
+    c.x += Math.cos(c.face) * CFG.lungeSpeed * dt; c.y += Math.sin(c.face) * CFG.lungeSpeed * dt;
+    resolve(c);
+    const d2 = Math.hypot(r.x - c.x, r.y - c.y);
+    const safe = r.vault && r.vault.p > 0.55;
+    if (d2 < CFG.hitRange && !safe && same && los(c.x, c.y, r.x, r.y)) { hitRunner(); return; }
+    c.t -= dt;
+    if (c.t <= 0) {
+      c.state = 'cool'; c.t = CFG.missCool; stats.dodges++;
+      floatText(r.x, r.y - .7, 'dodged', '#4fd1b5');
+    }
+    return;
+  }
+
+  // chase / cooldown
+  let speedMul = 1;
+  if (c.state === 'cool') { c.t -= dt; speedMul = 0.25; if (c.t <= 0) c.state = 'chase'; }
+  else {
+    if (c.tracked) c.chaseT += dt;
+    c.tier = c.chaseT > D.tiers[2] ? 3 : c.chaseT > D.tiers[1] ? 2 : c.chaseT > D.tiers[0] ? 1 : 0;
+    stats.maxTier = Math.max(stats.maxTier, c.tier);
+  }
+  const speed = (D.speed + c.tier * 0.2) * speedMul * (GROUND_SPEED[groundAt(c.x, c.y)] || 1) * (c.slowT > 0 ? 0.4 : 1);
+
+  // attack?
+  if (c.state === 'chase' && c.saw && !(r.vault && r.vault.p > 0.55)) {
+    const open = walkClear(c.x, c.y, r.x, r.y, 0.15);
+    if ((open && dist < D.trig) || (!open && c.sees && dist < 1.25)) {
+      c.state = 'lunge'; c.t = CFG.lungeTime;
+      c.face = Math.atan2(r.y + r.vy * 0.12 - c.y, r.x + r.vx * 0.12 - c.x);
+      return;
+    }
+  }
+
+  // track cells for route commitment
+  const N = W * H, cell = Math.floor(c.y) * W + Math.floor(c.x), cellN = c.floor * N + cell;   // cellN: this tile on this floor
+  if (cellN !== c.cell) { c.prevCell = c.cell; c.cell = cellN; }
+
+  c.repath -= dt;
+  if (c.repath <= 0) {
+    const tx = c.saw && r.vault ? r.vault.tx : c.kx, ty = c.saw && r.vault ? r.vault.ty : c.ky;
+    const pen = {};
+    if (c.prevCell >= 0) pen[c.prevCell] = 2.5;       // don't dither
+    if (now < c.fakeUntil) pen[c.fakeCell] = 40;      // mind game: go the other way round
+    c.path = findPath(cellN, (FL[c.kf] ? c.kf : 0) * N + Math.floor(ty) * W + Math.floor(tx), pen);
+    c.repath = 0.15;
+    if (!c.path && !c.saw) pickSearch(c, false);      // can't get there: look somewhere else
+  }
+  const path = c.path;
+  let tx = c.kx, ty = c.ky;
+  const direct = c.saw && walkClear(c.x, c.y, r.x, r.y, c.r);
+  if (direct) { c.fakeUntil = -9; tx = r.x; ty = r.y; }
+  if (!direct && path && path.length >= 2) {
+    // occasionally double back when the runner can't see us
+    if (c.state === 'chase' && D.fake > 0 && !c.sees && now > c.fakeUntil + 2.5 &&
+        path.length > 3 && path.length < 13 && Math.random() < D.fake * dt) {
+      c.fakeUntil = now + 0.8 + Math.random() * 0.9; c.fakeCell = path[1]; c.repath = 0;
+    }
+    const f1 = (path[1] / N) | 0, s1 = f1 === c.floor ? spec[path[1] - f1 * N] : null;
+    if (f1 !== c.floor) {
+      // next step is on the other floor: walk through the middle of this tile (the staircase) toward its far end
+      tx = (cell % W) + .5; ty = ((cell / W) | 0) + .5;
+      if (STAIR[cell]) { const [ax, ay] = STAIR_DIRS[STAIR[cell] - 1], sgn = c.floor === 0 ? 1 : -1; tx += ax * .3 * sgn; ty += ay * .3 * sgn; }
+    } else if (blocking(s1) && path[0] === cellN) {
+      tx = (cell % W) + .5; ty = ((cell / W) | 0) + .5;
+      if (Math.hypot(tx - c.x, ty - c.y) < 0.2 && c.state === 'chase') {
+        const sx = s1.x + .5, sy = s1.y + .5;
+        c.face = Math.atan2(sy - c.y, sx - c.x);
+        if (s1.type === 'window') {
+          c.state = 'vault';
+          c.vault = { fx: c.x, fy: c.y, tx: sx + (sx - tx) * 0.95, ty: sy + (sy - ty) * 0.95, p: 0 };
+        } else { c.state = 'break'; c.t = CFG.breakTime; c.target = s1; }
+        return;
+      }
+    } else {
+      let k = 1;
+      for (let j = 1; j < Math.min(path.length, 9); j++) {
+        const fj = (path[j] / N) | 0, ij = path[j] - fj * N;
+        if (fj !== c.floor || blocking(spec[ij])) break;
+        const px = (ij % W) + .5, py = ((ij / W) | 0) + .5;
+        if (walkClear(c.x, c.y, px, py, c.r + D.slack)) k = j;
+        if (STAIR[ij] || AIR[ij]) break;   // never cut the corner past a staircase or the edge of the upper floor
+      }
+      const ik = path[k] - ((path[k] / N) | 0) * N;
+      tx = (ik % W) + .5; ty = ((ik / W) | 0) + .5;
+    }
+  }
+  // A dropped diagonal pallet between it and where it is heading: break it.
+  if (c.state === 'chase') for (const s of DPAL) {
+    if (s.state !== 'down') continue;
+    const px = s.x + .5, py = s.y + .5; if (Math.hypot(c.x - px, c.y - py) > 1.4) continue;
+    const [nx, ny] = diagNormal(s), E = diagEnds(s), q = segClosest(c.x, c.y, E[0], E[1], E[2], E[3]);
+    const here = (c.x - px) * nx + (c.y - py) * ny, there = (tx - px) * nx + (ty - py) * ny;
+    if (here * there < 0 && Math.hypot(c.x - q[0], c.y - q[1]) < c.r + .32) {
+      c.state = 'break'; c.t = CFG.breakTime; c.target = s; c.face = Math.atan2(py - c.y, px - c.x); return;
+    }
+  }
+  const dx = tx - c.x, dy = ty - c.y, l = Math.hypot(dx, dy);
+  if (l > 0.01) {
+    const step = Math.min(l, speed * dt);
+    if (l < 0.7) { turnToward(c, dx / l, dy / l, 14, dt); c.x += dx / l * step; c.y += dy / l * step; }
+    else {
+      // limited turning: it swings wide on corners instead of tracing them perfectly
+      turnToward(c, dx / l, dy / l, D.turn, dt);
+      c.x += Math.cos(c.face) * step; c.y += Math.sin(c.face) * step;
+    }
+    resolve(c);
+    floorCheck(c, 0.8);
+    landCheck(c, 0.7);
+  }
+}
+
+/* ---------- Loop ---------- */
+function update(dt) {
+  now += dt; stats.time = now;
+  useFloor(runner.floor); updateRunner(dt);
+  if (mode === 'play' && !$('optNoChaser').checked) { useFloor(chaser.floor); updateChaser(dt); }
+  useFloor(runner.floor);
+  if (mode === 'play' && !hatchSaid && hatchOpen() && allSpecials().some(s => s.type === 'hatch')) { hatchSaid = true; say('The hatch has opened'); }
+  spacePressed = false;
+}
+
+function endRun(escapedBy) {
+  mode = 'over';
+  const t = stats.chase, prev = getBest(mapIdx, diffKey), isBest = t > prev;
+  if (isBest) store(bestKey(mapIdx, diffKey), t.toFixed(1));
+  const rank = t < 20 ? 'Caught quick' : t < 45 ? 'Getting there' : t < 90 ? 'Solid runner'
+             : t < 150 ? 'Slippery' : 'Uncatchable';
+  const tips = [];
+  if (stats.vaultHits) tips.push('You were hit mid-vault ' + stats.vaultHits + '×. If the chaser is within about 3 m when you reach a window, keep running instead — the vault won\'t finish in time.');
+  if (stats.palletHits) tips.push('You took a hit right next to a standing pallet. When the gap gets that small, drop it instead of going for one more lap.');
+  if (stats.earlyDrops) tips.push(stats.earlyDrops + ' pallet(s) dropped with the chaser more than 5 m away. That loop had at least one more safe lap in it.');
+  if (stats.slow > stats.fast) tips.push('Most of your vaults were slow (' + stats.slow + ' slow vs ' + stats.fast + ' fast). Line up and run straight at the window for a metre before pressing Space.');
+  if (stats.jams) tips.push('You jammed a window. Count your vaults and leave after the second one.');
+  if (stats.maxTier >= 2) tips.push('The chaser reached momentum tier ' + stats.maxTier + '. Long chases with no stun or pallet break make them faster — force a break or change loops sooner.');
+  if (!stats.drops && allSpecials().some(s => s.type === 'pallet')) tips.push('You never dropped a pallet. An unused pallet is worth nothing once you\'re down.');
+  if (stats.grabs) tips.unshift('You were pulled out of a locker. Only hide when the chaser hasn\'t seen you get in, and walk the last few steps — scratch marks lead it straight to the door.');
+  if (escapedBy) tips.unshift(escapedBy === 'gate' ? 'You opened the exit gate and got out. Opening it takes ' + CFG.gateTime + ' s of standing still, so you had to earn that distance first.'
+                                                    : 'You survived ' + CFG.hatchAfter + ' s in chase and escaped through the hatch.');
+  if (!tips.length) tips.push(t < 30 ? 'Stay on one loop and focus only on cutting corners tight. Turn on "See chaser through walls" until the rhythm clicks.'
+                                     : 'Clean run. Try the next difficulty, or turn the training aids off.');
+  $('card').innerHTML =
+    '<h3>' + (escapedBy ? 'Escaped!' : 'Caught') + (isBest ? ' — new best!' : '') + '</h3>' +
+    '<div class="big">' + t.toFixed(1) + 's</div><div class="rank">in chase — ' + rank + '</div>' +
+    '<div class="grid">' +
+    '<div>Total time alive <b>' + stats.time.toFixed(1) + 's</b></div><div>Times you lost the chaser <b>' + stats.lost + '</b></div>' +
+    '<div>Pallet stuns <b>' + stats.stuns + '</b></div><div>Pallets dropped <b>' + stats.drops + '</b></div>' +
+    '<div>Fast vaults <b>' + stats.fast + '</b></div><div>Slow vaults <b>' + stats.slow + '</b></div>' +
+    '<div>Lunges dodged <b>' + stats.dodges + '</b></div><div>Pallets broken <b>' + stats.breaks + '</b></div>' +
+    (allSpecials().some(s => s.type === 'task') ? '<div>Tasks done <b>' + stats.tasks + '/' + allSpecials().filter(s => s.type === 'task').length + '</b></div><div></div>' : '') +
+    '</div>' + tips.slice(0, 3).map(x => '<div class="coach">' + x + '</div>').join('') +
+    '<div class="go">Press <kbd>Space</kbd> or <kbd>R</kbd>, <kbd>A</kbd> on a controller, or tap here to run it again</div>';
+  $('overlay').classList.remove('hide');
+  buildDrills();
+}
+
+function setBars(edit) {
+  $('edbar').classList.toggle('hide', !edit); $('hud').classList.toggle('hide', edit); resize();
+}
+
+/* ---------- Custom drills + editor ---------- */
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const setCh = (s, i, ch) => s.substring(0, i) + ch + s.substring(i + 1);
+let tool = '#', painting = 0, hover = null, delArmed = false;
+/* Ground layer: one letter per tile, stored beside the drill's rows. '.' is plain floor. */
+const GROUNDS = { m: 'Wet mud (slow)', d: 'Dry mud', s: 'Snow (shows footprints)', g: 'Grass', c: 'Corn (hides you)',
+                  a: 'Sand', w: 'Shallow water (slow, no tracks)', p: 'Paving stones', f: 'Wooden floor', l: 'Fallen leaves' };
+const GROUND_SPEED = { m: 0.8, s: 0.9, c: 0.88, a: 0.93, w: 0.7 };   // how much each slows you and the chaser
+// the ground rows for a drill, made to match the size of its rows
+function groundRows(m) {
+  const h = m.rows.length, w = Math.max(...m.rows.map(r => r.length));
+  let g = Array.isArray(m.ground) ? m.ground : [];
+  if (g.length !== h || g.some(r => r.length !== w)) {
+    g = Array.from({ length: h }, (_, y) => (g[y] || '').substring(0, w).padEnd(w, '.')); m.ground = g;
+  }
+  return g;
+}
+const cropGround = (m, x0, y0, w, h) => groundRows(m).slice(y0, y0 + h).map(r => r.substring(x0, x0 + w));
+// the railing rows for a drill: one hex digit per tile saying which of its sides have a railing
+function railRows(m) {
+  const h = m.rows.length, w = Math.max(...m.rows.map(r => r.length));
+  let g = Array.isArray(m.rail) ? m.rail : [];
+  if (g.length !== h || g.some(r => r.length !== w)) {
+    g = Array.from({ length: h }, (_, y) => (g[y] || '').substring(0, w).padEnd(w, '0')); m.rail = g;
+  }
+  return g;
+}
+const cropL = (rows, x0, y0, w, h) => rows.slice(y0, y0 + h).map(r => r.substring(x0, x0 + w));
+// What gets stored for a drill. While the editor shows the upper floor the two floors are swapped in memory
+// (m.rows holds the upper one), and while the outline workspace is open everything is padded; undo both here.
+const savedRows = m => ws && ws.map === m ? wsCrop() : m.swapped ? m.up.rows : m.rows;
+const savedGround = m => ws && ws.map === m ? cropGround(m, ws.ox, ws.oy, ws.w, ws.h) : m.swapped ? m.up.ground : groundRows(m);
+const savedRail = m => ws && ws.map === m ? cropL(railRows(m), ws.ox, ws.oy, ws.w, ws.h) : m.swapped ? m.up.rail : railRows(m);
+// cars and large crates: a list of { t: type, x, y: centre in tiles, a: angle in eighths of a turn }
+const cleanObjs = a => Array.isArray(a) ? a.filter(o => o && OBJ_TYPES[o.t] && isFinite(o.x) && isFinite(o.y)).slice(0, 200)
+  .map(o => ({ t: o.t, x: +o.x, y: +o.y, a: (o.a | 0) & 7 })) : undefined;
+const savedObjs = m => (m.objs || []).map(o => ws && ws.map === m ? { t: o.t, x: o.x - ws.ox, y: o.y - ws.oy, a: o.a } : o);
+function savedUp(m) {
+  if (!m.up) return undefined;
+  ensureUp(m);
+  if (m.swapped) return { rows: m.rows, ground: groundRows(m), rail: railRows(m) };
+  const c = ws && ws.map === m ? r => cropL(r, ws.ox, ws.oy, ws.w, ws.h) : r => r;
+  return { rows: c(m.up.rows), ground: c(m.up.ground), rail: c(m.up.rail) };
+}
+function saveCustom() {
+  store('lt_custom', JSON.stringify(MAPS.filter(m => m.custom).map(m =>
+    ({ id: m.id, name: m.name, rows: savedRows(m), ground: savedGround(m), rail: savedRail(m), objs: savedObjs(m), up: savedUp(m) }))));
+}
+// Show one floor in the editor. Every editing tool works on m.rows, so the upper floor is swapped into it while it is shown.
+let swappedMap = null;
+function swapFloors(m) {
+  ensureUp(m);
+  const g0 = groundRows(m), r0 = railRows(m);
+  [m.rows, m.up.rows] = [m.up.rows, m.rows]; m.ground = m.up.ground; m.up.ground = g0; m.rail = m.up.rail; m.up.rail = r0;
+  m.swapped = !m.swapped; swappedMap = m.swapped ? m : null;
+}
+function settleFloors() {            // put the floors back the right way round before playing or switching drill
+  if (swappedMap) swapFloors(swappedMap);
+  edFloor = 0; syncFloorBtns();
+}
+function syncFloorBtns() {
+  $('edFloor0').classList.toggle('on', edFloor === 0); $('edFloor1').classList.toggle('on', edFloor === 1);
+}
+function setEdFloor(f) {
+  const m = MAPS[mapIdx]; if (!m.custom || mode !== 'edit') return;
+  if (ws || tool === 'outline') setTool('#');
+  if (f === 1) ensureUp(m);
+  if (!!m.swapped !== (f === 1)) swapFloors(m);
+  edFloor = f; sel = null; syncFloorBtns(); saveCustom(); loadMap();
+  edMsg(f ? 'Upper floor. The ground floor shows dimmed underneath. Use "Floor tile" to lay floor, then add walls and items on it. Anything left empty is open air you drop through. Join the floors with "Staircase to the upper floor" from the item list.'
+          : 'Ground floor.');
+}
+function edMsg(t) { $('edMsg').textContent = t; }
+function setTool(t) {
+  if (t !== 'outline') leaveWorkspace();
+  else if (edFloor) { settleFloors(); saveCustom(); }   // the outline is drawn on the ground floor
+  tool = t; outCells = [];
+  if (t !== 'stamp') { $('edStamp').value = ''; stampRows = null; }
+  if (!'EHJLUIMYSDATKXBG?'.includes(t)) $('edItem').value = '';
+  if (!t.startsWith('g:')) $('edGround').value = '';
+  $('edGroundFill').classList.toggle('hide', !t.startsWith('g:'));
+  for (const x of document.querySelectorAll('#tools button')) x.classList.toggle('on', x.dataset.t === t);
+  outStrokes = 0; outStarts = []; syncOutlineBtns();
+  if (t === 'outline') openWorkspace();
+  if (t === 'tri') edMsg('Half wall: a wall filling half a tile, corner to corner. Press R to choose which corner it fills, then click or drag to place. Click one already there to turn it. Use them to make diagonal walls.');
+  else if (t === 'P') edMsg('Pallet: click a one-tile gap in a wall. Press R to lay it diagonally instead ( / or \\ ), for a gap between diagonal walls.' + (palDiag ? ' Currently diagonal.' : ''));
+  else if (t === 'rail') edMsg('Railing: click near a side of a tile to put a railing along that side; click it again (or right-click) to remove it. Railings stop you and the chaser stepping across, so a platform edge with one can\'t be dropped off. You can still see over them.');
+  else if (t === 'floor') edMsg('Floor tile: drag over open air on the upper floor to lay floor. It never overwrites walls or items.');
+  else if (t === 'select') edMsg('Click a structure to select just its tiles (Shift-click adds or removes a piece). Then drag it or use the arrow keys to move it, R rotates, M mirrors, or name it and press Save stamp.');
+  else if (t === 'outline') edMsg('Draw the edge of the map. To change part of an existing outline, draw from it and back to it. To replace it, draw a new closed shape, or drag corner-to-corner for a box. Items inside are kept. Nothing changes until you press Save outline.');
+  else edMsg('');
+}
+
+/* Map outline: the drill is shown on a 60x40 workspace while you draw its new edge. */
+const MAX_W = 120, MAX_H = 80;   // largest map
+let WS_W = 60, WS_H = 40;         // size of the outline workspace, set each time it opens
+let ws = null, outCells = [], sel = null, selA = null, selAdd = false, selPivot = null;
+const selSet = new Set();   // selected structure tiles, as y * 1000 + x
+function finishSelect() {
+  const m = MAPS[mapIdx];
+  const isS = (x, y) => y >= 0 && y < m.rows.length && x >= 0 && x < m.rows[0].length && STRUCT_RE.test(m.rows[y][x]);
+  if (!selAdd) selSet.clear();
+  selPivot = null;
+  if (sel[0] === sel[2] && sel[1] === sel[3]) {
+    // a click: take the whole connected piece under the cursor
+    if (isS(sel[0], sel[1])) {
+      const comp = new Set([sel[1] * 1000 + sel[0]]), stack = [[sel[0], sel[1]]];
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const k = (y + dy) * 1000 + x + dx;
+          if (isS(x + dx, y + dy) && !comp.has(k)) { comp.add(k); stack.push([x + dx, y + dy]); }
+        }
+      }
+      const remove = selAdd && selSet.has(sel[1] * 1000 + sel[0]);
+      for (const k of comp) if (remove) selSet.delete(k); else selSet.add(k);
+    }
+  } else {
+    for (let y = sel[1]; y <= sel[3]; y++) for (let x = sel[0]; x <= sel[2]; x++) if (isS(x, y)) selSet.add(y * 1000 + x);
+  }
+  sel = null;
+  edMsg(selSet.size ? 'Selected ' + selSet.size + ' tiles. Drag it or use the arrow keys to move it, R rotates, M mirrors, or type a name and press Save stamp. Shift-click adds or removes another piece.'
+                    : 'Nothing selected. Click a structure to select it, or drag a box over one.');
+}
+function openWorkspace() {
+  if (ws) return;
+  const m = MAPS[mapIdx], old = m.rows, w = old[0].length, h = old.length;
+  // room to grow on every side, up to the largest map allowed
+  WS_W = Math.min(MAX_W, Math.max(60, w + 40)); WS_H = Math.min(MAX_H, Math.max(40, h + 30));
+  const px = (WS_W - w) >> 1, py = (WS_H - h) >> 1;
+  const og = groundRows(m);
+  ws = { map: m, ox: px, oy: py, w, h }; sel = null;
+  const padded = (src, fill) => Array.from({ length: WS_H }, (_, y) =>
+    (fill || '.').repeat(px) + (src[y - py] || (fill || '.').repeat(w)) + (fill || '.').repeat(WS_W - w - px));
+  const orl = railRows(m);
+  for (const o of m.objs || []) { o.x += px; o.y += py; }   // cars and crates move with the map too
+  if (m.up) { ensureUp(m); m.up.rows = padded(m.up.rows, '~'); m.up.ground = padded(m.up.ground); m.up.rail = padded(m.up.rail, '0'); }   // the upper floor moves with the map
+  m.rows = padded(old); m.ground = padded(og); m.rail = padded(orl, '0');
+  loadMap();
+}
+function wsCrop() { return ws.map.rows.slice(ws.oy, ws.oy + ws.h).map(r => r.substring(ws.ox, ws.ox + ws.w)); }
+function leaveWorkspace() {
+  if (!ws) return;
+  const same = ws.map === MAPS[mapIdx];
+  const g = cropGround(ws.map, ws.ox, ws.oy, ws.w, ws.h);
+  const rl = cropL(railRows(ws.map), ws.ox, ws.oy, ws.w, ws.h);
+  for (const o of ws.map.objs || []) { o.x -= ws.ox; o.y -= ws.oy; }
+  if (ws.map.up) { const u = ws.map.up; for (const k of ['rows', 'ground', 'rail']) u[k] = cropL(u[k], ws.ox, ws.oy, ws.w, ws.h); }
+  ws.map.rows = wsCrop(); ws.map.ground = g; ws.map.rail = rl; ws = null; outCells = [];
+  if (same && mode === 'edit') loadMap();
+}
+function addOutline(p) {
+  const a = outCells[outCells.length - 1], n = Math.max(Math.abs(p[0] - a[0]), Math.abs(p[1] - a[1]));
+  for (let i = 1; i <= n; i++) outCells.push([Math.round(a[0] + (p[0] - a[0]) * i / n), Math.round(a[1] + (p[1] - a[1]) * i / n)]);
+}
+let outStrokes = 0, outStarts = [];
+function syncOutlineBtns() {
+  $('edOutSave').classList.toggle('hide', tool !== 'outline'); $('edOutClear').classList.toggle('hide', tool !== 'outline');
+}
+/* Saving the outline. Three cases:
+   - the new strokes join the existing outline at their ends: that part of the edge is re-routed and the rest stays
+   - the new strokes make a closed loop on their own: they replace the old outline
+   - otherwise: the map becomes a plain box around what was drawn
+   Whatever ends up inside the outline (walls, items, start points) is kept exactly where it is. */
+function commitOutline() {
+  const m = MAPS[mapIdx];
+  if (tool !== 'outline' || !ws) return;
+  if (outCells.length < 3) { edMsg('Nothing to save yet: drag corner-to-corner for a box, draw all the way round for a shape, or draw from the existing outline back to it to change part of it.'); return; }
+  const GW = WS_W, GH = WS_H, N = GW * GH, wsOld = ws;
+  const inb = (x, y) => x >= 0 && y >= 0 && x < GW && y < GH;
+  const line = (a, b) => {
+    const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])), o = [];
+    for (let i = 1; i <= n; i++) o.push([Math.round(a[0] + (b[0] - a[0]) * i / n), Math.round(a[1] + (b[1] - a[1]) * i / n)]);
+    return o;
+  };
+  const nearest = (p, test, r) => {
+    let best = null, bd = 1e9;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const x = p[0] + dx, y = p[1] + dy;
+      if (inb(x, y) && test(x, y) && dx * dx + dy * dy < bd) { bd = dx * dx + dy * dy; best = [x, y]; }
+    }
+    return best;
+  };
+  // cells reachable from the edge of the workspace without crossing a barrier
+  const floodOutside = bar => {
+    const out = new Uint8Array(N), st = [];
+    const seed = (x, y) => { const i = y * GW + x; if (!bar[i] && !out[i]) { out[i] = 1; st.push(i); } };
+    for (let x = 0; x < GW; x++) { seed(x, 0); seed(x, GH - 1); }
+    for (let y = 0; y < GH; y++) { seed(0, y); seed(GW - 1, y); }
+    while (st.length) {
+      const i = st.pop(), x = i % GW, y = (i / GW) | 0;
+      if (x > 0) seed(x - 1, y); if (x < GW - 1) seed(x + 1, y); if (y > 0) seed(x, y - 1); if (y < GH - 1) seed(x, y + 1);
+    }
+    return out;
+  };
+
+  // the outline already on the map: 'O' tiles, or on older drills a wall that borders the empty outside
+  const old = new Uint8Array(N); let hasOld = false;
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const ch = m.rows[y][x]; let o = ch === 'O';
+    if (ch === '#') for (let dy = -1; dy <= 1 && !o; dy++) for (let dx = -1; dx <= 1; dx++)
+      if (inb(x + dx, y + dy) && m.rows[y + dy][x + dx] === '~') { o = true; break; }
+    if (o) { old[y * GW + x] = 1; hasOld = true; }
+  }
+  // a plain box map has no drawn outline, so treat the ring just outside it as one; then its edge can be re-routed too
+  if (!hasOld && wsOld.ox > 0 && wsOld.oy > 0 && wsOld.ox + wsOld.w < GW && wsOld.oy + wsOld.h < GH) {
+    for (let x = wsOld.ox - 1; x <= wsOld.ox + wsOld.w; x++) { old[(wsOld.oy - 1) * GW + x] = 1; old[(wsOld.oy + wsOld.h) * GW + x] = 1; }
+    for (let y = wsOld.oy - 1; y <= wsOld.oy + wsOld.h; y++) { old[y * GW + wsOld.ox - 1] = 1; old[y * GW + wsOld.ox + wsOld.w] = 1; }
+    hasOld = true;
+  }
+  const isOld = (x, y) => old[y * GW + x] === 1;
+
+  const strokes = outStarts.map((s, k) => outCells.slice(s, k + 1 < outStarts.length ? outStarts[k + 1] : outCells.length)).filter(s => s.length);
+  const owner = new Int16Array(N), drawn = new Uint8Array(N);
+  strokes.forEach((s, k) => { for (const c of s) { owner[c[1] * GW + c[0]] = k + 1; drawn[c[1] * GW + c[0]] = 1; } });
+  const ends = strokes.map(s => [s[0], s[s.length - 1]]);
+  let touchesOld = false;
+  const anchored = strokes.every((s, k) => ends[k].every(p => {
+    if (nearest(p, isOld, 3)) { touchesOld = true; return true; }
+    return !!nearest(p, (x, y) => owner[y * GW + x] && owner[y * GW + x] !== k + 1, 2);
+  }));
+
+  // one straight diagonal drag is the "make it a box" gesture, even if it happens to start and end on the outline
+  const s0 = strokes[0], dxs = Math.abs(s0[s0.length - 1][0] - s0[0][0]), dys = Math.abs(s0[s0.length - 1][1] - s0[0][1]);
+  const boxDrag = strokes.length === 1 && dxs >= 4 && dys >= 4 && s0.length <= Math.max(dxs, dys) * 1.2 + 2;
+  let how, bar;
+  if (hasOld && anchored && touchesOld && !boxDrag) {
+    how = 'modify'; bar = new Uint8Array(N);
+    for (let i = 0; i < N; i++) bar[i] = old[i] || drawn[i];
+    for (const e of ends) for (const p of e) { const o = nearest(p, isOld, 3); if (o) for (const c of line(p, o)) bar[c[1] * GW + c[0]] = 1; }   // join the ends on
+  } else {
+    const loop = drawn.slice();
+    if (strokes.length === 1) for (const c of line(strokes[0][strokes[0].length - 1], strokes[0][0])) loop[c[1] * GW + c[0]] = 1;   // a single stroke is closed for you
+    const out = floodOutside(loop); let cnt = 0;
+    for (let i = 0; i < N; i++) if (!loop[i] && !out[i]) cnt++;
+    if (cnt >= 40) { how = 'replace'; bar = loop; } else how = 'box';
+  }
+
+  let x0, x1, y0, y1, cellAt, okAt;
+  if (how === 'box') {
+    x0 = Math.min(...outCells.map(c => c[0])); x1 = Math.max(...outCells.map(c => c[0]));
+    y0 = Math.min(...outCells.map(c => c[1])); y1 = Math.max(...outCells.map(c => c[1]));
+    cellAt = (x, y) => { const ch = m.rows[y][x]; return ch === '~' || ch === 'O' ? '.' : ch; };
+    okAt = () => true;
+  } else {
+    const out = floodOutside(bar);
+    // separate enclosed areas
+    const comp = new Int32Array(N), info = [null];
+    for (let s = 0; s < N; s++) {
+      if (bar[s] || out[s] || comp[s]) continue;
+      const id = info.length, st = [s], rec = { size: 0, wasVoid: 0, hasR: false }; comp[s] = id;
+      while (st.length) {
+        const i = st.pop(), x = i % GW, y = (i / GW) | 0, ch = m.rows[y][x];
+        // "used to be outside": empty space, or beyond the old map's edge
+        if (ch === '~' || x < wsOld.ox || y < wsOld.oy || x >= wsOld.ox + wsOld.w || y >= wsOld.oy + wsOld.h) rec.wasVoid++;
+        rec.size++; if (ch === 'R') rec.hasR = true;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, j = ny * GW + nx;
+          if (inb(nx, ny) && !bar[j] && !out[j] && !comp[j]) { comp[j] = id; st.push(j); }
+        }
+      }
+      info.push(rec);
+    }
+    if (info.length < 2) { edMsg('That doesn\'t enclose any space yet. Join the lines up, or press Clear outline and try again.'); return; }
+    const keep = new Uint8Array(info.length);
+    if (how === 'replace') keep.fill(1);
+    else {
+      // keep the area you start in, plus any newly enclosed ground that used to be outside; an area cut off from it is dropped
+      let main = info.findIndex((r, k) => k > 0 && r.hasR);
+      if (main < 0) { main = 1; for (let k = 2; k < info.length; k++) if (info[k].size > info[main].size) main = k; }
+      for (let k = 1; k < info.length; k++) keep[k] = k === main || info[k].wasVoid / info[k].size > 0.5 ? 1 : 0;
+    }
+    const inside = new Uint8Array(N);
+    for (let i = 0; i < N; i++) if (comp[i] && keep[comp[i]]) inside[i] = 1;
+    // sort the barrier tiles: 1 = stays as outline wall, 2 = now in the middle of the map so it dissolves, 0 = left outside
+    const kind = new Uint8Array(N);
+    const around = (i, f) => {
+      const x = i % GW, y = (i / GW) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if ((dx || dy) && f(x + dx, y + dy)) return true; }
+      return false;
+    };
+    for (let i = 0; i < N; i++) if (bar[i] && !around(i, (x, y) => !inb(x, y) || (!inside[y * GW + x] && !bar[y * GW + x]))) kind[i] = 2;
+    for (let i = 0; i < N; i++) if (bar[i] && !kind[i] && around(i, (x, y) => inb(x, y) && (inside[y * GW + x] || kind[y * GW + x] === 2))) kind[i] = 1;
+    x0 = GW; x1 = 0; y0 = GH; y1 = 0;
+    for (let i = 0; i < N; i++) if (inside[i] || kind[i]) {
+      const x = i % GW, y = (i / GW) | 0;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    }
+    okAt = (x, y) => inside[y * GW + x] === 1 || kind[y * GW + x] === 2;
+    cellAt = (x, y) => {
+      const i = y * GW + x, ch = m.rows[y][x];
+      if (inside[i]) return ch === '~' || ch === 'O' || old[i] ? '.' : ch;
+      if (kind[i] === 1) return 'O';
+      if (kind[i] === 2) return '.';
+      return ch === 'R' || ch === 'C' ? ch : '~';
+    };
+  }
+  while (x1 - x0 + 1 < 12) { if (x1 < GW - 1) x1++; if (x1 - x0 + 1 < 12 && x0 > 0) x0--; }
+  while (y1 - y0 + 1 < 8) { if (y1 < GH - 1) y1++; if (y1 - y0 + 1 < 8 && y0 > 0) y0--; }
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1, rows = [];
+  for (let y = y0; y <= y1; y++) { let s = ''; for (let x = x0; x <= x1; x++) s += cellAt(x, y); rows.push(s); }
+
+  // keep both start points inside the outline, moving them if they were left outside
+  const fixSpawn = (ch, score) => {
+    let pos = null; rows.forEach((r, y) => { const x = r.indexOf(ch); if (x >= 0) pos = [x, y]; });
+    if (pos && okAt(pos[0] + x0, pos[1] + y0)) return pos;
+    if (pos) rows[pos[1]] = setCh(rows[pos[1]], pos[0], '~');
+    let best = null, bs = -1e9;
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++)
+      if (rows[y][x] === '.' && okAt(x + x0, y + y0)) { const sc = score(x, y); if (sc > bs) { bs = sc; best = [x, y]; } }
+    if (best) rows[best[1]] = setCh(rows[best[1]], best[0], ch);
+    return best;
+  };
+  const rp = fixSpawn('R', (x, y) => -x - Math.abs(y - bh / 2)) || [0, 0];
+  fixSpawn('C', (x, y) => Math.hypot(x - rp[0], y - rp[1]));
+  outCells = []; outStrokes = 0; outStarts = [];
+  m.ground = cropGround(m, x0, y0, bw, bh);   // the ground moves with the map
+  m.rail = cropL(railRows(m), x0, y0, bw, bh);
+  m.objs = (m.objs || []).map(o => ({ t: o.t, x: o.x - x0, y: o.y - y0, a: o.a })).filter(o => o.x >= 0 && o.y >= 0 && o.x <= bw && o.y <= bh);
+  if (m.up) for (const k of ['rows', 'ground', 'rail']) m.up[k] = cropL(m.up[k], x0, y0, bw, bh);   // and so does the upper floor
+  m.rows = rows; ws = null; sel = null;
+  $('edW').value = bw; $('edH').value = bh;
+  saveCustom(); setTool('#'); loadMap();
+  edMsg(how === 'modify' ? 'Outline updated (' + bw + ' × ' + bh + '). Everything inside it was kept.'
+      : how === 'replace' ? 'Map outline saved as your shape (' + bw + ' × ' + bh + '). Everything inside it was kept.'
+      : 'Map saved as a ' + bw + ' × ' + bh + ' box. (For a custom shape the lines must join into a closed loop, or start and end on the existing outline.)');
+}
+function loadCustom() {
+  try {
+    for (const m of JSON.parse(store('lt_custom') || '[]'))
+      if (m && Array.isArray(m.rows) && m.rows.length && m.rows.every(r => typeof r === 'string'))
+        MAPS.push({ id: String(m.id), name: String(m.name || 'My drill'), desc: 'Custom drill', rows: m.rows, custom: true,
+                    ground: Array.isArray(m.ground) && m.ground.every(r => typeof r === 'string') ? m.ground : undefined,
+                    rail: Array.isArray(m.rail) && m.rail.every(r => typeof r === 'string') ? m.rail : undefined, objs: cleanObjs(m.objs),
+                    up: m.up && Array.isArray(m.up.rows) && m.up.rows.every(r => typeof r === 'string')
+                      ? { rows: m.up.rows, ground: Array.isArray(m.up.ground) && m.up.ground.every(r => typeof r === 'string') ? m.up.ground : [],
+                          rail: Array.isArray(m.up.rail) && m.up.rail.every(r => typeof r === 'string') ? m.up.rail : [] } : undefined });
+  } catch (e) {}
+}
+function newDrill(copy) {
+  const src = MAPS[mapIdx], n = MAPS.filter(m => m.custom).length + 1;
+  let rows;
+  if (copy) { const w = Math.max(...src.rows.map(r => r.length)); rows = src.rows.map(r => r.padEnd(w, '.')); }
+  else {
+    rows = []; for (let y = 0; y < 20; y++) rows.push('.'.repeat(36));
+    rows[10] = setCh(setCh(rows[10], 3, 'R'), 32, 'C');
+  }
+  MAPS.push({ id: 'c' + Date.now().toString(36), name: copy ? (src.name + ' copy').slice(0, 30) : 'My drill ' + n,
+              desc: 'Custom drill', rows, custom: true, ground: copy && src.ground ? groundRows(src).slice() : undefined });
+  mapIdx = MAPS.length - 1; store('lt_map', mapIdx); saveCustom(); enterEdit();
+}
+function enterEdit() {
+  const m = MAPS[mapIdx]; if (!m.custom) return;
+  settleFloors();
+  leaveWorkspace(); sel = null; if (tool === 'outline') tool = '#';
+  outCells = []; outStrokes = 0; outStarts = []; syncOutlineBtns();
+  const w = Math.max(...m.rows.map(r => r.length)); m.rows = m.rows.map(r => r.padEnd(w, '.'));
+  mode = 'edit'; hover = null; loadMap(); $('overlay').classList.add('hide');
+  $('edName').value = m.name; $('edW').value = w; $('edH').value = m.rows.length;
+  if (tool === 'stamp' && !stampRows) tool = '#';
+  for (const b of document.querySelectorAll('#tools button')) b.classList.toggle('on', b.dataset.t === tool);
+  setBars(true); buildDrills();
+}
+// Cars and large crates: placed anywhere on a half-tile grid and turned in 45-degree steps.
+let objAngle = 0, hoverF = null;
+let triCorner = 0, palDiag = 0, lastPaint = null;   // which corner a new triangle wall fills; 0 = pallet in a wall gap, 1 or 2 = diagonal
+function evPos(e) { const rect = cv.getBoundingClientRect(); return [(e.clientX - rect.left - ox) / S - 1, (e.clientY - rect.top - oy) / S - 1]; }
+const snapHalf = v => Math.round(v * 2) / 2;
+function objAtPos(m, fx, fy) {
+  const list = m.objs || [];
+  for (let k = list.length - 1; k >= 0; k--) {
+    const o = list[k], T = OBJ_TYPES[o.t], an = o.a * Math.PI / 4, dx = fx - o.x, dy = fy - o.y;
+    if (Math.abs(dx * Math.cos(an) + dy * Math.sin(an)) <= T.hl && Math.abs(-dx * Math.sin(an) + dy * Math.cos(an)) <= T.hw) return k;
+  }
+  return -1;
+}
+function placeObj(e, remove) {
+  const m = MAPS[mapIdx], [fx, fy] = evPos(e);
+  if (edFloor) { edMsg('Cars and large crates go on the ground floor.'); return; }
+  if (!m.objs) m.objs = [];
+  const k = objAtPos(m, fx, fy);
+  if (remove) { if (k >= 0) { m.objs.splice(k, 1); saveCustom(); loadMap(); edMsg('Removed.'); } return; }
+  if (k >= 0) {                      // clicking one that is already there turns it
+    m.objs[k].a = (m.objs[k].a + 1) & 7; saveCustom(); loadMap();
+    edMsg('Turned 45°. Click it again to keep turning, or right-click to remove it.'); return;
+  }
+  const x = snapHalf(fx), y = snapHalf(fy);
+  if (x < 0 || y < 0 || x > m.rows[0].length || y > m.rows.length) return;
+  m.objs.push({ t: tool.slice(4), x, y, a: objAngle }); saveCustom(); loadMap();
+}
+// Railing tool: click near a side of a tile to put a railing on that side, click it again to take it off.
+function toggleRail(e, remove) {
+  const rect = cv.getBoundingClientRect(), m = MAPS[mapIdx];
+  const fx = (e.clientX - rect.left - ox) / S - 1, fy = (e.clientY - rect.top - oy) / S - 1;
+  const x = Math.floor(fx), y = Math.floor(fy);
+  if (y < 0 || y >= m.rows.length || x < 0 || x >= m.rows[0].length) return;
+  const d = [fy - y, 1 - (fx - x), 1 - (fy - y), fx - x];            // how far the click is from the N, E, S, W side
+  const side = d.indexOf(Math.min(...d)), bit = 1 << side;
+  // You stand on a platform at upper-floor height, so its railings are kept with the upper floor.
+  const deckSide = (xx, yy) => !edFloor && m.rows[yy] && m.rows[yy][xx] === 'D';
+  const nx = x + STAIR_DIRS[side][0], ny = y + STAIR_DIRS[side][1], obit = 1 << ((side + 2) % 4);
+  const rows = (deckSide(x, y) || deckSide(nx, ny)) ? ensureUp(m).rail : railRows(m);
+  const get = (xx, yy) => parseInt((rows[yy] || '')[xx] || '0', 16) || 0;
+  const set = (xx, yy, v) => { if (rows[yy] && xx >= 0 && xx < rows[yy].length) rows[yy] = setCh(rows[yy], xx, v.toString(16)); };
+  const has = (get(x, y) & bit) || (get(nx, ny) & obit);
+  set(x, y, has || remove ? get(x, y) & ~bit : get(x, y) | bit);
+  if (has || remove) set(nx, ny, get(nx, ny) & ~obit);
+  saveCustom(); loadMap();
+  edMsg(has || remove ? 'Railing removed.' : 'Railing added. Click it again to remove it.');
+}
+function cellFromEvent(e) {
+  const rect = cv.getBoundingClientRect(), m = MAPS[mapIdx];
+  const x = Math.floor((e.clientX - rect.left - ox) / S) - 1, y = Math.floor((e.clientY - rect.top - oy) / S) - 1;
+  return (y < 0 || y >= m.rows.length || x < 0 || x >= m.rows[0].length) ? null : [x, y];
+}
+function paintAt(e, erase) {
+  const p = cellFromEvent(e); hover = p; if (!p) return;
+  const m = MAPS[mapIdx];
+  if (ws) return;                                     // nothing is painted while the outline workspace is open
+  if ((erase || tool === '.') && !edFloor) {          // erasing over a car or large crate removes it
+    const [fx, fy] = evPos(e), k = objAtPos(m, fx, fy);
+    if (k >= 0) { m.objs.splice(k, 1); saveCustom(); loadMap(); return; }
+  }
+  if (tool.startsWith('g:')) {                        // ground brush: right-drag puts plain floor back
+    const g = groundRows(m), gch = erase ? '.' : tool[2];
+    if (g[p[1]][p[0]] === gch) return;
+    g[p[1]] = setCh(g[p[1]], p[0], gch); saveCustom(); loadMap(); return;
+  }
+  let ch = erase ? '.' : tool;
+  if (ch === 'P' && palDiag) ch = String(palDiag);    // a pallet turned to lie diagonally
+  if (ch === 'tri') {                                 // half-triangle wall; clicking one that is there turns it to the next corner
+    const cur = m.rows[p[1]][p[0]], key = p[0] + ',' + p[1];
+    if (lastPaint === key) return;                    // one change per tile per drag
+    lastPaint = key;
+    ch = TRI_CHARS.includes(cur) && cur.length === 1 ? TRI_CHARS[(TRI_CHARS.indexOf(cur) + 1) % 4] : TRI_CHARS[triCorner];
+  }
+  if (ch === 'floor') {                               // the Floor tile tool only fills open air; it never wipes out what is there
+    if (m.rows[p[1]][p[0]] !== '~') return;
+    ch = '.';
+  }
+  else if (edFloor && ch === '.') ch = '~';           // on the upper floor, erasing leaves open air
+  if (edFloor && (ch === 'R' || ch === 'C')) { edMsg('Start points go on the ground floor.'); return; }
+  if (ch === '?') {                                   // random prop: only onto empty floor, one per tile
+    if (m.rows[p[1]][p[0]] !== '.') return;
+    ch = PROPS[Math.floor(Math.random() * PROPS.length)];
+  }
+  const was = m.rows[p[1]][p[0]];
+  if (was === ch) return;
+  if (ch === 'R' || ch === 'C') m.rows = m.rows.map(r => r.replace(ch, '.'));
+  m.rows[p[1]] = setCh(m.rows[p[1]], p[0], ch);
+  if (isStairCh(ch) || isStairCh(was)) {
+    // a staircase lives on both floors at the same spot: place, turn or remove its other end too
+    const other = ensureUp(m).rows, upper = edFloor ? m.rows : other;
+    other[p[1]] = setCh(other[p[1]], p[0], isStairCh(ch) ? ch : '.');
+    if (isStairCh(ch)) {
+      // give it a landing upstairs at the top end, if there is only air there
+      const [ax, ay] = STAIR_DIRS[STAIR_CHARS.indexOf(ch)];
+      for (const k of [-1, 0, 1]) {
+        const yy = p[1] + ay + (ax ? k : 0), xx = p[0] + ax + (ay ? k : 0);
+        if (upper[yy] && upper[yy][xx] === '~') upper[yy] = setCh(upper[yy], xx, '.');
+      }
+    }
+  }
+  saveCustom(); loadMap();
+}
+/* Ready-made structures for the editor, one per kind of loop. '.' is open floor. */
+const STAMPS = [
+  { name: 'Long wall with a window', rows: ['#####W#####'] },
+  { name: 'Short pallet loop', rows: ['###P###'] },
+  { name: 'Corner wall with a window', rows: [
+    '####W###',
+    '#.......',
+    '#.......',
+    '#.......',
+    '........',
+    '....####'] },
+  { name: 'Twin walls: window and pallet', rows: [
+    '###W####',
+    '........',
+    '........',
+    '........',
+    '####P###'] },
+  { name: 'Hut: window, door, pallet door', rows: [
+    '####W####',
+    '#.......P',
+    '#.......#',
+    '#.......#',
+    '#.#######'] },
+  { name: 'Offset walls (no pallet)', rows: [
+    '#####....',
+    '.........',
+    '.........',
+    '....#####'] },
+  { name: 'T-shaped wall', rows: [
+    '#######',
+    '...#...',
+    '...#...',
+    '...#...'] },
+  { name: 'L-shaped wall', rows: [
+    '#....',
+    '#....',
+    '#....',
+    '#####'] },
+  // A compact tower with clipped corners and a cross-shaped core to run around. 1 window, 1 pallet, 1 doorway.
+  { name: 'Tower', rows: [
+    '.#######.',
+    '##.....##',
+    '#...#...W',
+    '#..###..#',
+    'P...#...#',
+    '#.......#',
+    '##.....##',
+    '.###.###.'] },
+  // A raised deck against a wall, with stairs at one end: run up, along, and drop off the far side.
+  { name: 'Raised deck with stairs', rows: [
+    '#######',
+    'ADDDDDD',
+    '.DDDDDD'] },
+  // Two upper rooms split by a pallet wall, over a hall with a centre pillar. 4 windows, 4 pallets, 3 plain doors.
+  { name: 'Large main building', rows: [
+    '######W##########W#####',
+    '#..........#..........#',
+    '#..........#..........#',
+    'W..........P..........#',
+    '#..........#..........P',
+    '#..........#..........#',
+    '####.############P#####',
+    '#.....................#',
+    '#.........###.........#',
+    '..........###.........W',
+    '#.........###.........#',
+    '#.....................#',
+    '###########P######.####'] },
+];
+let stampRows = null;
+function rotateStamp() {
+  if (!stampRows) return;
+  const h = stampRows.length, w = stampRows[0].length, out = [];
+  for (let x = 0; x < w; x++) { let s = ''; for (let y = h - 1; y >= 0; y--) s += ROT_CH[stampRows[y][x]] || stampRows[y][x]; out.push(s); }
+  stampRows = out;
+}
+function mirrorStamp() {
+  if (stampRows) stampRows = stampRows.map(r => r.split('').reverse().map(c => MIR_CH[c] || c).join(''));   // flip left-right
+}
+// Helpers for changing the structure that is selected on the map.
+let moveD = null;
+function selCells() {
+  const m = MAPS[mapIdx];
+  return [...selSet].map(k => [k % 1000, (k / 1000) | 0])
+    .filter(([x, y]) => m.rows[y] && STRUCT_RE.test(m.rows[y][x] || '')).map(([x, y]) => [x, y, m.rows[y][x]]);
+}
+// '' if the tiles can go to their new places; otherwise why not
+function canRelocate(cells, out) {
+  const m = MAPS[mapIdx], own = new Set(cells.map(c => c[1] * 1000 + c[0]));
+  for (const [x, y] of out) {
+    if (y < 0 || y >= m.rows.length || x < 0 || x >= m.rows[0].length) return 'edge';
+    if (m.rows[y][x] === '~' && !edFloor) return 'edge';
+    if (!own.has(y * 1000 + x) && /[#OWPRCTKXBGEHJLSDAFNQV12UIMY]/.test(m.rows[y][x])) return 'overlap';
+  }
+  return '';
+}
+function relocate(cells, out) {
+  const m = MAPS[mapIdx];
+  for (const [x, y] of cells) m.rows[y] = setCh(m.rows[y], x, '.');
+  for (const [x, y, ch] of out) m.rows[y] = setCh(m.rows[y], x, ch);
+  saveCustom(); loadMap();
+  for (const [x, y] of out) selSet.add(y * 1000 + x);   // keep it selected
+}
+function moveSelection(dx, dy) {
+  if (tool !== 'select') return false;
+  const cells = selCells(); if (!cells.length) return false;
+  const out = cells.map(([x, y, ch]) => [x + dx, y + dy, ch]), why = canRelocate(cells, out);
+  if (why) { edMsg(why === 'edge' ? 'Can\'t move it off the map.' : 'Can\'t move it there: it would overlap another structure or a start point.'); return true; }
+  relocate(cells, out);
+  if (selPivot) selPivot = [selPivot[0] + dx, selPivot[1] + dy];
+  edMsg('Moved. Drag it or use the arrow keys to move it again; R rotates, M mirrors.');
+  return true;
+}
+
+// Rotate or mirror the structure currently selected on the map, in place.
+function transformSelection(kind) {
+  const m = MAPS[mapIdx], mh = m.rows.length, mw = m.rows[0].length;
+  const cells = [...selSet].map(k => [k % 1000, (k / 1000) | 0])
+    .filter(([x, y]) => m.rows[y] && STRUCT_RE.test(m.rows[y][x] || '')).map(([x, y]) => [x, y, m.rows[y][x]]);
+  if (tool !== 'select' || !cells.length) return false;
+  const x0 = Math.min(...cells.map(c => c[0])), x1 = Math.max(...cells.map(c => c[0]));
+  const y0 = Math.min(...cells.map(c => c[1])), y1 = Math.max(...cells.map(c => c[1]));
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  let out;
+  if (kind === 'mirror') out = cells.map(([x, y, ch]) => [x0 + x1 - x, y, MIR_CH[ch] || ch]);
+  else {
+    if (h > mw || w > mh) { edMsg('There is not enough room on the map to rotate that.'); return true; }
+    // turn about one fixed point for as long as this selection lasts, so repeated turns never creep
+    if (!selPivot) selPivot = [x0 + w / 2, y0 + h / 2];
+    const nx0 = Math.max(0, Math.min(mw - h, Math.round(selPivot[0] - h / 2)));
+    const ny0 = Math.max(0, Math.min(mh - w, Math.round(selPivot[1] - w / 2)));
+    out = cells.map(([x, y, ch]) => [nx0 + (h - 1 - (y - y0)), ny0 + (x - x0), ROT_CH[ch] || ch]);
+  }
+  if (canRelocate(cells, out)) {
+    edMsg('No room: that would overlap another structure or a start point. Clear some space and try again.'); return true;
+  }
+  relocate(cells, out);
+  edMsg((kind === 'mirror' ? 'Mirrored' : 'Rotated') + ' the selected structure. R rotates again, M mirrors.');
+  return true;
+}
+function stampOrigin(p) { return [p[0] - (stampRows[0].length >> 1), p[1] - (stampRows.length >> 1)]; }
+// true if any tile of the stamp would land on an existing structure or start point
+function stampBlocked(p) {
+  const m = MAPS[mapIdx], [x0, y0] = stampOrigin(p);
+  for (let y = 0; y < stampRows.length; y++) for (let x = 0; x < stampRows[0].length; x++) {
+    if (stampRows[y][x] === '.') continue;
+    const row = m.rows[y0 + y], cur = row && row[x0 + x];
+    if (cur && cur !== '.' && !(edFloor && cur === '~')) return true;   // upstairs, open air is free to build on
+  }
+  return false;
+}
+function placeStamp(e) {
+  const p = cellFromEvent(e); hover = p; if (!p || !stampRows) return;
+  if (stampBlocked(p)) { edMsg('Can\'t place it there: it would overlap another structure or a start point.'); return; }
+  const m = MAPS[mapIdx], [x0, y0] = stampOrigin(p);
+  for (let y = 0; y < stampRows.length; y++) for (let x = 0; x < stampRows[0].length; x++) {
+    const tx = x0 + x, ty = y0 + y;
+    if (ty < 0 || ty >= m.rows.length || tx < 0 || tx >= m.rows[0].length) continue;
+    if (stampRows[y][x] === '.') {                                          // empty parts of the stamp leave the map alone,
+      if (edFloor && m.rows[ty][tx] === '~') m.rows[ty] = setCh(m.rows[ty], tx, '.');   // except upstairs, where they lay floor over open air
+      continue;
+    }
+    const cur = m.rows[ty][tx]; if (cur === 'R' || cur === 'C') continue;   // never stamp over a start point
+    m.rows[ty] = setCh(m.rows[ty], tx, stampRows[y][x]);
+  }
+  saveCustom(); loadMap();
+}
+
+/* Your own stamps: saved by name, and a matching name replaces the existing stamp. */
+let userStamps = [], hiddenStamps = [], stDelArmed = '';
+const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+function loadStamps() {
+  try {
+    userStamps = JSON.parse(store('lt_stamps') || '[]').filter(s => s && typeof s.name === 'string' &&
+      Array.isArray(s.rows) && s.rows.length && s.rows.every(r => typeof r === 'string'));
+    hiddenStamps = JSON.parse(store('lt_stamps_hidden') || '[]').filter(s => typeof s === 'string');
+  } catch (e) { userStamps = []; hiddenStamps = []; }
+}
+function allStamps() {
+  const out = [];
+  for (const s of STAMPS) {
+    const u = userStamps.find(u => sameName(u.name, s.name));
+    if (u) out.push(u); else if (!hiddenStamps.some(h => sameName(h, s.name))) out.push(s);
+  }
+  for (const u of userStamps) if (!STAMPS.some(s => sameName(s.name, u.name))) out.push(u);
+  return out;
+}
+function fillStampSelect() {
+  $('edStamp').innerHTML = '<option value="">Stamp a structure…</option>' +
+    allStamps().map((s, i) => '<option value="' + i + '">' + esc(s.name) + (userStamps.includes(s) ? ' ★' : '') + '</option>').join('');
+}
+function saveStamp() {
+  const name = $('stName').value.trim().slice(0, 30), m = MAPS[mapIdx];
+  const picked = [...selSet].map(k => [k % 1000, (k / 1000) | 0]).filter(([x, y]) => m.rows[y] && STRUCT_RE.test(m.rows[y][x] || ''));
+  if (!picked.length || ws) { edMsg('First choose "Select structure" and click the structure you want to save.'); return; }
+  if (!name) { edMsg('Type a name for the stamp first.'); return; }
+  const bx0 = Math.min(...picked.map(p => p[0])), bx1 = Math.max(...picked.map(p => p[0]));
+  const by0 = Math.min(...picked.map(p => p[1])), by1 = Math.max(...picked.map(p => p[1]));
+  let rows = [];
+  for (let y = by0; y <= by1; y++) {
+    let s = ''; for (let x = bx0; x <= bx1; x++) s += selSet.has(y * 1000 + x) ? m.rows[y][x] : '.';
+    rows.push(s);
+  }
+  // trim empty margins so the stamp is just the structure
+  while (!STRUCT_RE.test(rows[0])) rows.shift();
+  while (!STRUCT_RE.test(rows[rows.length - 1])) rows.pop();
+  const lead = Math.min(...rows.map(r => r.search(STRUCT_RE)).filter(i => i >= 0));
+  const end = Math.max(...rows.map(r => r.replace(/\.+$/, '').length));
+  rows = rows.map(r => r.substring(lead, end));
+  const i = userStamps.findIndex(u => sameName(u.name, name));
+  const existed = i >= 0 || allStamps().some(s => sameName(s.name, name));
+  if (i >= 0) userStamps[i] = { name: userStamps[i].name, rows }; else userStamps.push({ name, rows });
+  store('lt_stamps', JSON.stringify(userStamps)); fillStampSelect();
+  edMsg((existed ? 'Overwrote stamp "' : 'Saved new stamp "') + name + '". It is in the stamp list marked ★.');
+}
+function deleteStamp() {
+  const name = $('stName').value.trim();
+  const target = allStamps().find(s => sameName(s.name, name));
+  if (!target) { edMsg('No stamp with that name. Pick one from the stamp list first.'); return; }
+  if (!sameName(stDelArmed, name)) { stDelArmed = name; edMsg('Press Delete stamp again to remove "' + target.name + '".'); return; }
+  stDelArmed = '';
+  const builtIn = STAMPS.some(s => sameName(s.name, name));
+  if (userStamps.includes(target)) {
+    userStamps = userStamps.filter(u => u !== target); store('lt_stamps', JSON.stringify(userStamps));
+    edMsg(builtIn ? 'Removed your version; "' + target.name + '" is back to the original.' : 'Deleted stamp "' + target.name + '".');
+  } else {
+    hiddenStamps.push(target.name); store('lt_stamps_hidden', JSON.stringify(hiddenStamps));
+    edMsg('Removed "' + target.name + '" from the stamp list.');
+  }
+  fillStampSelect(); if (tool === 'stamp') setTool('#');
+}
+
+/* Export / import: custom drills, your stamps and best times as one JSON file, to carry between browsers. */
+function dataMsg(t) { $('dataMsg').textContent = t; }
+function exportData() {
+  const bests = {};
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('lt_best_')) bests[k] = localStorage.getItem(k); } } catch (e) {}
+  return JSON.stringify({ app: 'loop-trainer', version: 1,
+    drills: MAPS.filter(m => m.custom).map(m => ({ id: m.id, name: m.name, rows: savedRows(m), ground: savedGround(m), rail: savedRail(m), objs: savedObjs(m), up: savedUp(m) })),
+    stamps: userStamps, hiddenStamps, bests }, null, 1);
+}
+function importData(text) {
+  let d; try { d = JSON.parse(text); } catch (e) { d = null; }
+  if (!d || d.app !== 'loop-trainer') { dataMsg('That isn\'t a Loop Trainer export.'); return; }
+  const clean = (rows, allowed) => Array.isArray(rows) && rows.length && rows.length <= MAX_H && rows.every(r => typeof r === 'string' && r.length <= MAX_W)
+    ? rows.map(r => r.replace(allowed, '.')) : null;
+  showMenu();   // leave the editor or a run before changing the drill list
+  let nd = 0, ns = 0;
+  for (const m of Array.isArray(d.drills) ? d.drills : []) {
+    const rows = m && clean(m.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12UIMY]/g); if (!rows) continue;
+    const id = String(m.id || 'c' + Date.now().toString(36) + nd), name = String(m.name || 'My drill').slice(0, 30);
+    const cur = MAPS.find(x => x.custom && x.id === id);
+    const ground = clean(m.ground, /[^.mdsgcawpfl]/g) || undefined;
+    const upRows = m.up && clean(m.up.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12UIMY]/g);
+    const up = upRows ? { rows: upRows, ground: clean(m.up.ground, /[^.mdsgcawpfl]/g) || [], rail: clean(m.up.rail, /[^0-9a-f]/g) || [] } : undefined;
+    const rail = clean(m.rail, /[^0-9a-f]/g) || undefined, objs = cleanObjs(m.objs);
+    if (cur) { cur.name = name; cur.rows = rows; cur.ground = ground; cur.rail = rail; cur.objs = objs; cur.up = up; cur.swapped = false; }
+    else MAPS.push({ id, name, desc: 'Custom drill', rows, custom: true, ground, rail, objs, up });
+    nd++;
+  }
+  for (const s of Array.isArray(d.stamps) ? d.stamps : []) {
+    const rows = s && typeof s.name === 'string' && clean(s.rows, /[^#WP.TKXBGEHJLSDAFNQV12]/g); if (!rows) continue;
+    const name = s.name.slice(0, 30), i = userStamps.findIndex(u => sameName(u.name, name));
+    if (i >= 0) userStamps[i] = { name, rows }; else userStamps.push({ name, rows });
+    ns++;
+  }
+  for (const h of Array.isArray(d.hiddenStamps) ? d.hiddenStamps : [])
+    if (typeof h === 'string' && !hiddenStamps.some(x => sameName(x, h))) hiddenStamps.push(h);
+  for (const k in (d.bests && typeof d.bests === 'object' ? d.bests : {})) {
+    const v = parseFloat(d.bests[k]);
+    if (k.startsWith('lt_best_') && v > (parseFloat(store(k)) || 0)) store(k, v.toFixed(1));
+  }
+  saveCustom(); store('lt_stamps', JSON.stringify(userStamps)); store('lt_stamps_hidden', JSON.stringify(hiddenStamps));
+  fillStampSelect(); buildDrills(); showMenu();
+  dataMsg('Imported ' + nd + ' drill' + (nd === 1 ? '' : 's') + ' and ' + ns + ' stamp' + (ns === 1 ? '' : 's') + '. Matching ones were overwritten.');
+}
+
+function resizeDrill() {
+  if (ws) setTool('#');
+  sel = null;
+  const m = MAPS[mapIdx];
+  const w = Math.max(12, Math.min(MAX_W, parseInt($('edW').value, 10) || 36));
+  const h = Math.max(8, Math.min(MAX_H, parseInt($('edH').value, 10) || 20));
+  const fill = edFloor ? '~' : '.';   // new space is floor on the ground, open air upstairs
+  let rows = m.rows.slice(0, h).map(r => r.substring(0, w).padEnd(w, fill));
+  while (rows.length < h) rows.push(fill.repeat(w));
+  m.rows = rows; m.objs = (m.objs || []).filter(o => o.x <= w && o.y <= h);
+  $('edW').value = w; $('edH').value = h; saveCustom(); loadMap();
+}
+
+function showMenu() {
+  leaveWorkspace(); settleFloors(); mode = 'menu'; loadMap(); setBars(false);
+  $('card').innerHTML = '<h3>' + esc(MAPS[mapIdx].name) + '</h3>' +
+    '<div class="coach">You are the <b style="color:#4fd1b5">teal</b> dot. The chaser is faster than you in a straight line — ' +
+    'you only gain time by using walls, windows and pallets. Two hits and the run is over.</div>' +
+    '<div class="coach">' + ($('optShiftRun').checked ? 'Hold <kbd>Shift</kbd> to run.' : 'Hold <kbd>Shift</kbd> to walk.') +
+    ' Running leaves scratch marks the chaser can follow; walking is slow but leaves none.</div>' +
+    '<div class="coach">The chaser starts out hunting and doesn\'t know where you are. A chase begins when it sees you or your scratch marks. Your score is time spent in chase.</div>' +
+    '<div class="go">Press <kbd>Space</kbd>, <kbd>A</kbd> on a controller, or tap here to start</div>';
+  $('overlay').classList.remove('hide');
+  updateHud();
+}
+function startRun() {
+  leaveWorkspace(); settleFloors(); loadMap(); setBars(false); buildDrills(); mode = 'play';
+  $('overlay').classList.add('hide');
+  say($('optNoChaser').checked ? 'Exploring: the chaser is switched off' : 'The chaser is hunting for you');
+}
+
+function updateHud() {
+  $('hTime').textContent = stats.chase.toFixed(1);
+  const nTasks = allSpecials().filter(s => s.type === 'task').length;
+  $('hTaskBox').classList.toggle('hide', !nTasks);
+  if (nTasks) $('hTasks').textContent = (nTasks - tasksLeft()) + '/' + nTasks;
+  $('hHp').innerHTML = [0, 1].map(i => '<span class="pip hp' + (i < runner.hp ? ' on' : '') + '"></span>').join('');
+  $('hMo').innerHTML = [0, 1, 2].map(i => '<span class="pip mo' + (i < chaser.tier ? ' on' : '') + '"></span>').join('');
+  $('hDist').textContent = $('optNoChaser').checked ? 'off' : Math.hypot(runner.x - chaser.x, runner.y - chaser.y).toFixed(1) + ' m';
+  const b = getBest(mapIdx, diffKey); $('hBest').textContent = b ? b.toFixed(1) + 's' : '–';
+}
+
+/* ---------- Render ---------- */
+let S = 20, ox = 0, oy = 0, vw = 0, vh = 0;
+const MIN_TILE = 18;   // smallest tile size, in pixels, that a run is played at
+function resize() {
+  const rect = $('wrap').getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  vw = rect.width; vh = rect.height;
+  cv.width = Math.max(1, Math.round(vw * dpr)); cv.height = Math.max(1, Math.round(vh * dpr));
+  if (W) { S = Math.min(vw / W, vh / H); ox = (vw - W * S) / 2; oy = (vh - H * S) / 2; }
+}
+// Ground. Each type is a base colour plus a little texture that varies from tile to tile.
+function drawGround(g, x, y) {
+  const h = (x * 73 + y * 151) % 17, v = h / 17;
+  const rect = (c, ax, ay, w, hh) => { ctx.fillStyle = c; ctx.fillRect(x + ax, y + ay, w, hh); };
+  const dot = (c, ax, ay, r) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x + ax, y + ay, r, 0, 7); ctx.fill(); };
+  const stroke = (c, w, pts) => {
+    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x + pts[0], y + pts[1]);
+    for (let i = 2; i < pts.length; i += 2) ctx.lineTo(x + pts[i], y + pts[i + 1]); ctx.stroke();
+  };
+  if (g === 'm') {            // wet mud
+    rect('#2a2017', 0, 0, 1.01, 1.01); dot('#1d150e', .3 + v * .3, .55, .26); dot('#1d150e', .72, .28 + v * .2, .17);
+    dot('rgba(150,170,175,.25)', .28 + v * .3, .5, .08);
+  } else if (g === 'd') {     // dry mud
+    rect('#4b3b29', 0, 0, 1.01, 1.01);
+    stroke('#2f2418', .035, [.1, .2 + v * .2, .45, .45, .4, .85]); stroke('#2f2418', .035, [.45, .45, .9, .35 + v * .3]);
+  } else if (g === 's') {     // snow
+    rect('#8b999f', 0, 0, 1.01, 1.01); dot('#a9b6bb', .25 + v * .4, .3, .2); dot('#a9b6bb', .7, .68 - v * .2, .16); dot('#778489', .45, .82, .07);
+  } else if (g === 'g') {     // grass
+    rect('#1e3423', 0, 0, 1.01, 1.01);
+    for (let i = 0; i < 4; i++) { const bx = .14 + i * .24 + ((h + i * 5) % 7) * .012, by = .3 + ((h * (i + 2)) % 9) * .06; stroke('#2f5236', .045, [bx, by + .2, bx + .04, by]); }
+  } else if (g === 'c') {     // corn field soil; the stalks are drawn later, over the people
+    rect('#35301a', 0, 0, 1.01, 1.01); stroke('#272311', .05, [0, .5, 1, .5]);
+  } else if (g === 'a') {     // sand
+    rect('#6c6045', 0, 0, 1.01, 1.01); dot('#7d7052', .3 + v * .3, .35, .05); dot('#5c5139', .68, .62, .05); dot('#7d7052', .2, .78, .04);
+  } else if (g === 'w') {     // shallow water, with a slow ripple
+    rect('#19384a', 0, 0, 1.01, 1.01);
+    const ph = Math.sin(performance.now() / 700 + x * 1.3 + y * .9) * .08;
+    stroke('rgba(120,180,200,.35)', .04, [.12, .38 + ph, .42, .32 + ph, .7, .4 + ph]); stroke('rgba(120,180,200,.22)', .04, [.3, .72 - ph, .6, .66 - ph, .88, .73 - ph]);
+  } else if (g === 'p') {     // paving stones
+    rect('#3a4144', 0, 0, 1.01, 1.01); stroke('#272d2f', .04, [0, .5, 1, .5]);
+    stroke('#272d2f', .04, y % 2 ? [.5, 0, .5, .5] : [.25, 0, .25, .5]); stroke('#272d2f', .04, y % 2 ? [.25, .5, .25, 1] : [.75, .5, .75, 1]);
+  } else if (g === 'f') {     // wooden floor
+    rect('#4a3826', 0, 0, 1.01, 1.01); stroke('#33261a', .04, [0, .33, 1, .33]); stroke('#33261a', .04, [0, .67, 1, .67]);
+    stroke('#33261a', .04, [.3 + v * .4, 0, .3 + v * .4, .33]); stroke('#33261a', .04, [.7 - v * .4, .33, .7 - v * .4, .67]);
+  } else if (g === 'l') {     // fallen leaves
+    rect('#2c241a', 0, 0, 1.01, 1.01);
+    const cols = ['#8a4a1e', '#a8702a', '#6b3a18', '#93602a'];
+    for (let i = 0; i < 5; i++) dot(cols[(h + i) % 4], .15 + ((h * (i + 3)) % 11) * .07, .15 + ((h + i * 7) % 11) * .07, .075);
+  }
+}
+function drawCorn(x, y) {
+  const h = (x * 29 + y * 53) % 7;
+  for (let i = 0; i < 4; i++) {
+    const cx = x + .2 + (i % 2) * .5 + ((h + i) % 3) * .04, cy = y + .22 + (i >> 1) * .5 + ((h + i * 2) % 3) * .04;
+    ctx.fillStyle = 'rgba(120,140,50,.82)';
+    for (let k = 0; k < 4; k++) { ctx.save(); ctx.translate(cx, cy); ctx.rotate(k * 1.57 + h * .3 + i); ctx.beginPath(); ctx.ellipse(.13, 0, .15, .05, 0, 0, 7); ctx.fill(); ctx.restore(); }
+    ctx.fillStyle = 'rgba(214,186,84,.9)'; ctx.beginPath(); ctx.arc(cx, cy, .055, 0, 7); ctx.fill();
+  }
+}
+// One tile of a merged rock hill: flat grey top, a dark cliff on every outer edge, and a shaded slope on the ramp side.
+function drawHillTile(x, y) {
+  const i = y * W + x, id = HILL[i], hd = { dx: RDX[i], dy: RDY[i] }, v = ((x * 31 + y * 17) % 9) / 9;
+  const same = (dx, dy) => HILL[i + dy * W + dx] === id;
+  const wood = hills[id].family === 2;                       // platform and stairs, rather than rock
+  const top = wood ? '#75593a' : '#6b757a', low = wood ? '#3d2d1c' : '#3c4347';
+  if (RAMP[i]) {
+    const g = ctx.createLinearGradient(x + .5 + hd.dx * .5, y + .5 + hd.dy * .5, x + .5 - hd.dx * .5, y + .5 - hd.dy * .5);
+    g.addColorStop(0, low); g.addColorStop(1, top); ctx.fillStyle = g;
+  } else ctx.fillStyle = top;
+  ctx.fillRect(x - .01, y - .01, 1.03, 1.03);
+  if (wood && !RAMP[i]) {    // deck planks
+    ctx.strokeStyle = '#523d26'; ctx.lineWidth = .04; ctx.beginPath();
+    for (const o of [.25, .5, .75]) { ctx.moveTo(x, y + o); ctx.lineTo(x + 1, y + o); }
+    ctx.moveTo(x + .3 + v * .4, y); ctx.lineTo(x + .3 + v * .4, y + .25); ctx.moveTo(x + .7 - v * .4, y + .5); ctx.lineTo(x + .7 - v * .4, y + .75);
+    ctx.stroke();
+  } else if (wood) {         // stair treads, running across the climb
+    ctx.strokeStyle = '#2a1e12'; ctx.lineWidth = .06; ctx.beginPath();
+    for (const o of [-.3, -.1, .1, .3]) {
+      const mx = x + .5 + hd.dx * o, my = y + .5 + hd.dy * o, px = -hd.dy, py = hd.dx;
+      ctx.moveTo(mx + px * .5, my + py * .5); ctx.lineTo(mx - px * .5, my - py * .5);
+    }
+    ctx.stroke();
+  } else if (!RAMP[i]) {     // a little surface texture on the rock top
+    ctx.fillStyle = '#7b868b'; ctx.beginPath(); ctx.ellipse(x + .35 + v * .3, y + .4, .22, .13, v * 3, 0, 7); ctx.fill();
+    ctx.fillStyle = '#5d676c'; ctx.beginPath(); ctx.ellipse(x + .65 - v * .2, y + .72, .12, .07, v * 5, 0, 7); ctx.fill();
+  } else {                   // chevrons pointing up the slope
+    ctx.strokeStyle = 'rgba(210,220,224,.4)'; ctx.lineWidth = .05;
+    for (const off of [-.12, .16]) {
+      const mx = x + .5 - hd.dx * off, my = y + .5 - hd.dy * off, px = -hd.dy, py = hd.dx;   // p is across the slope
+      ctx.beginPath(); ctx.moveTo(mx + px * .2 + hd.dx * .1, my + py * .2 + hd.dy * .1); ctx.lineTo(mx, my);
+      ctx.lineTo(mx - px * .2 + hd.dx * .1, my - py * .2 + hd.dy * .1); ctx.stroke();
+    }
+  }
+  // cliff edges, except where the ramp meets the ground
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    if (same(dx, dy)) continue;
+    if (RAMP[i] && dx === hd.dx && dy === hd.dy) continue;
+    ctx.fillStyle = wood ? '#241a10' : '#2a3033';
+    if (dx) ctx.fillRect(dx < 0 ? x : x + .84, y - .01, .16, 1.03); else ctx.fillRect(x - .01, dy < 0 ? y : y + .84, 1.03, .16);
+    ctx.fillStyle = wood ? '#93744f' : '#8b969b';
+    if (dx) ctx.fillRect(dx < 0 ? x + .16 : x + .79, y - .01, .05, 1.03); else ctx.fillRect(x - .01, dy < 0 ? y + .16 : y + .79, 1.03, .05);
+  }
+}
+// A car or large crate, drawn at its own angle. Its length runs along its local x axis.
+function drawObj(o) {
+  const T = OBJ_TYPES[o.t], h = Math.abs(Math.round(o.x * 7 + o.y * 13)) % 4;
+  let hl = T.hl, hw = T.hw;
+  const box = (x, y, w, hh, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, hh, r); else ctx.rect(x, y, w, hh); };
+  ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.a * Math.PI / 4);
+  if (o.t === 'car') {
+    ctx.scale(hl / 2.1, hw / 0.95); hl = 2.1; hw = 0.95;   // the artwork below is laid out at 4.2 x 1.9 and scaled to the car's real size
+    const body = ['#5b6b78', '#7a4a3a', '#4d5d49', '#6e6a58'][h], dark = ['#3f4b55', '#573428', '#374334', '#4e4b3e'][h];
+    ctx.fillStyle = '#0d1112';                                         // wheels
+    for (const wx of [-1.35, 1.25]) for (const wy of [-1, 1]) ctx.fillRect(wx - .32, wy * (hw - .1) - .14, .64, .28);
+    ctx.fillStyle = body; box(-hl, -hw, hl * 2, hw * 2, .38); ctx.fill();
+    ctx.strokeStyle = '#151b1d'; ctx.lineWidth = .07; ctx.stroke();
+    ctx.fillStyle = dark; box(-1.05, -hw + .14, 2.0, hw * 2 - .28, .22); ctx.fill();   // roof
+    ctx.fillStyle = '#1c2a31';                                         // windscreen and rear window
+    ctx.beginPath(); ctx.moveTo(.62, -hw + .2); ctx.lineTo(1.12, -hw + .3); ctx.lineTo(1.12, hw - .3); ctx.lineTo(.62, hw - .2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-.78, -hw + .2); ctx.lineTo(-1.2, -hw + .3); ctx.lineTo(-1.2, hw - .3); ctx.lineTo(-.78, hw - .2); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = dark; ctx.lineWidth = .05; ctx.beginPath(); ctx.moveTo(1.3, -hw + .2); ctx.lineTo(1.3, hw - .2); ctx.stroke();   // bonnet line
+    ctx.fillStyle = '#d9d2a8'; ctx.fillRect(hl - .18, -hw + .16, .12, .3); ctx.fillRect(hl - .18, hw - .46, .12, .3);                    // headlights
+    ctx.fillStyle = '#8a2f28'; ctx.fillRect(-hl + .06, -hw + .16, .1, .28); ctx.fillRect(-hl + .06, hw - .44, .1, .28);                  // tail lights
+    ctx.fillStyle = 'rgba(120,70,40,.5)';                              // rust
+    ctx.beginPath(); ctx.arc(1.6 - h * .2, -.4 + h * .15, .16, 0, 7); ctx.arc(-1.6, .35 - h * .1, .13, 0, 7); ctx.fill();
+  } else {
+    ctx.fillStyle = '#7a5a34'; ctx.fillRect(-hl, -hw, hl * 2, hw * 2);
+    ctx.strokeStyle = '#4e3a22'; ctx.lineWidth = .07; ctx.strokeRect(-hl, -hw, hl * 2, hw * 2);
+    ctx.lineWidth = .05; ctx.beginPath();
+    for (const y of [-hw / 3, hw / 3]) { ctx.moveTo(-hl, y); ctx.lineTo(hl, y); }
+    ctx.moveTo(-hl, -hw); ctx.lineTo(hl, hw); ctx.moveTo(hl, -hw); ctx.lineTo(-hl, hw);
+    ctx.stroke();
+    ctx.strokeStyle = '#8f6c42'; ctx.lineWidth = .1; ctx.strokeRect(-hl + .1, -hw + .1, hl * 2 - .2, hw * 2 - .2);
+  }
+  ctx.restore();
+}
+// A half-triangle wall: same colours as a wall, with a lighter line along its sloping face.
+function drawTri(x, y, t) {
+  const V = triVerts(t, x, y);
+  ctx.fillStyle = '#3b4a4e'; ctx.beginPath(); ctx.moveTo(V[0], V[1]); ctx.lineTo(V[2], V[3]); ctx.lineTo(V[4], V[5]); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#4a5c61'; ctx.lineWidth = .08; ctx.beginPath();
+  if (t === 1 || t === 3) { ctx.moveTo(x + 1, y); ctx.lineTo(x, y + 1); } else { ctx.moveTo(x, y); ctx.lineTo(x + 1, y + 1); }
+  ctx.stroke();
+}
+function drawDeck(x, y) {
+  const v = ((x * 31 + y * 17) % 9) / 9;
+  ctx.fillStyle = '#75593a'; ctx.fillRect(x - .01, y - .01, 1.03, 1.03);
+  ctx.strokeStyle = '#523d26'; ctx.lineWidth = .04; ctx.beginPath();
+  for (const o of [.25, .5, .75]) { ctx.moveTo(x, y + o); ctx.lineTo(x + 1, y + o); }
+  ctx.moveTo(x + .3 + v * .4, y); ctx.lineTo(x + .3 + v * .4, y + .25); ctx.moveTo(x + .7 - v * .4, y + .5); ctx.lineTo(x + .7 - v * .4, y + .75);
+  ctx.stroke();
+}
+// A staircase between floors. d is the way it climbs (0 north, 1 east, 2 south, 3 west).
+// Seen from the ground floor the arrow points up the stairs; from upstairs it points back down them.
+function drawStairs(x, y, d, fromBelow) {
+  const [dx, dy] = STAIR_DIRS[d], px = -dy, py = dx, cx = x + .5, cy = y + .5;
+  const g = ctx.createLinearGradient(cx - dx * .5, cy - dy * .5, cx + dx * .5, cy + dy * .5);
+  g.addColorStop(0, '#3d2d1c'); g.addColorStop(1, '#7a5e3c');                 // darker at the bottom, lighter at the top
+  ctx.fillStyle = g; ctx.fillRect(x, y, 1.01, 1.01);
+  ctx.strokeStyle = '#2a1e12'; ctx.lineWidth = .05; ctx.beginPath();
+  for (const o of [-.3, -.1, .1, .3]) { ctx.moveTo(cx + dx * o + px * .42, cy + dy * o + py * .42); ctx.lineTo(cx + dx * o - px * .42, cy + dy * o - py * .42); }
+  ctx.stroke();
+  // handrails down both sides, and a closed end: the top when seen from below, the bottom when seen from above
+  ctx.strokeStyle = '#c9d2d4'; ctx.lineWidth = .08; ctx.beginPath();
+  for (const s of [-1, 1]) { ctx.moveTo(cx + px * .46 * s - dx * .5, cy + py * .46 * s - dy * .5); ctx.lineTo(cx + px * .46 * s + dx * .5, cy + py * .46 * s + dy * .5); }
+  const e = fromBelow ? 1 : -1;
+  ctx.moveTo(cx + dx * .46 * e + px * .46, cy + dy * .46 * e + py * .46); ctx.lineTo(cx + dx * .46 * e - px * .46, cy + dy * .46 * e - py * .46);
+  ctx.stroke();
+  const a = fromBelow ? 1 : -1;                                                 // arrow: the way you travel on it from this floor
+  ctx.fillStyle = fromBelow ? '#f0b648' : '#6fd3e8'; ctx.beginPath();
+  ctx.moveTo(cx + dx * .3 * a, cy + dy * .3 * a);
+  ctx.lineTo(cx - dx * .08 * a + px * .2, cy - dy * .08 * a + py * .2); ctx.lineTo(cx - dx * .08 * a - px * .2, cy - dy * .08 * a - py * .2);
+  ctx.closePath(); ctx.fill();
+}
+// Railings on the sides of a tile (bits 1, 2, 4, 8 for north, east, south, west).
+function drawRail(x, y, mask) {
+  edgeRects(x, y, mask, (ax, ay, bx, by) => {
+    ctx.fillStyle = '#c9d2d4'; ctx.fillRect(ax, ay, bx - ax, by - ay);
+    ctx.fillStyle = '#6f828b';
+    const horiz = bx - ax > by - ay;
+    for (const t of [0, .5, 1]) {
+      if (horiz) ctx.fillRect(ax + (bx - ax) * t - .05, ay - .03, .1, by - ay + .06);
+      else ctx.fillRect(ax - .03, ay + (by - ay) * t - .05, bx - ax + .06, .1);
+    }
+  });
+}
+// Props. Each is drawn slightly differently per tile so a row of them doesn't look stamped.
+function drawProp(ch, x, y) {
+  const v = ((x * 7 + y * 13) % 5) / 5, cx = x + .5, cy = y + .5;
+  if (ch === 'T') {          // tree: canopy seen from above
+    ctx.fillStyle = '#1f3d2a'; ctx.beginPath(); ctx.arc(cx, cy, .5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2c5638'; ctx.beginPath(); ctx.arc(cx - .1 + v * .2, cy - .08, .33, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a6e47'; ctx.beginPath(); ctx.arc(cx + .08, cy + .1 - v * .1, .16, 0, 7); ctx.fill();
+  } else if (ch === 'K') {   // rock
+    ctx.fillStyle = '#5b6468'; ctx.beginPath();
+    ctx.moveTo(x + .12, y + .55 + v * .1); ctx.lineTo(x + .3, y + .15); ctx.lineTo(x + .7 - v * .1, y + .1);
+    ctx.lineTo(x + .92, y + .45); ctx.lineTo(x + .78, y + .88); ctx.lineTo(x + .3, y + .9); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7a858a'; ctx.beginPath();
+    ctx.moveTo(x + .34, y + .25); ctx.lineTo(x + .62, y + .2); ctx.lineTo(x + .7, y + .45); ctx.lineTo(x + .4, y + .5); ctx.closePath(); ctx.fill();
+  } else if (ch === 'X') {   // crate
+    ctx.fillStyle = '#7a5a34'; ctx.fillRect(x + .08, y + .08, .84, .84);
+    ctx.strokeStyle = '#4e3a22'; ctx.lineWidth = .07; ctx.strokeRect(x + .08, y + .08, .84, .84);
+    ctx.beginPath(); ctx.moveTo(x + .08, y + .08); ctx.lineTo(x + .92, y + .92); ctx.moveTo(x + .92, y + .08); ctx.lineTo(x + .08, y + .92); ctx.stroke();
+  } else if (ch === 'B') {   // burn barrel: rusty drum with a fire in it
+    const t = performance.now() / 1000, fl = 0.8 + 0.2 * Math.sin(t * 11 + x * 2.1 + y * 1.3);
+    ctx.fillStyle = v > .5 ? '#4a4f55' : '#6a4334'; ctx.beginPath(); ctx.arc(cx, cy, .4, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#1a2226'; ctx.lineWidth = .06; ctx.stroke();
+    ctx.fillStyle = '#140c08'; ctx.beginPath(); ctx.arc(cx, cy, .29, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e8641e'; ctx.beginPath(); ctx.arc(cx + Math.sin(t * 7 + x) * .03, cy, .22 * fl, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffc24a'; ctx.beginPath(); ctx.arc(cx - Math.sin(t * 9 + y) * .03, cy + .02, .12 * fl, 0, 7); ctx.fill();
+  } else if (ch === 'D') {   // raised platform seen from the ground: the deck, with a dark edge where it stops
+    drawDeck(x, y);
+    const i = y * W + x;
+    for (const [dx, dy] of STAIR_DIRS) {
+      const j = i + dy * W + dx; if (PROP[j] === 'D' || STAIR[j]) continue;
+      ctx.fillStyle = '#241a10';
+      if (dx) ctx.fillRect(dx < 0 ? x : x + .86, y - .01, .14, 1.03); else ctx.fillRect(x - .01, dy < 0 ? y : y + .86, 1.03, .14);
+    }
+  } else if (ch === 'A') {   // platform stairs that touch no platform: drawn, but they lead nowhere
+    ctx.fillStyle = '#4a3a26'; ctx.fillRect(x + .06, y + .06, .88, .88);
+    ctx.strokeStyle = '#2a1e12'; ctx.lineWidth = .05; ctx.beginPath();
+    for (const o of [.28, .5, .72]) { ctx.moveTo(x + .06, y + o); ctx.lineTo(x + .94, y + o); }
+    ctx.stroke();
+  } else if (ch === 'G') {   // bush
+    ctx.fillStyle = 'rgba(52,110,62,.8)';
+    for (const [ax, ay, ar] of [[.3, .35, .3], [.68, .3, .27], [.5, .68, .32], [.25, .72, .2], [.78, .7, .22]]) {
+      ctx.beginPath(); ctx.arc(x + ax, y + ay + v * .05, ar, 0, 7); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(90,150,90,.55)';
+    ctx.beginPath(); ctx.arc(x + .42, y + .42, .12, 0, 7); ctx.arc(x + .66, y + .6, .1, 0, 7); ctx.fill();
+  }
+}
+// top-down person: feet, arms, shoulders, head. +x is the way they face.
+function drawPerson(x, y, face, r, body, head, phase, armed, swinging) {
+  const sw = phase === null ? 0 : Math.sin(phase);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(face);
+  ctx.lineWidth = .05; ctx.strokeStyle = '#0e1213';
+  // feet
+  ctx.fillStyle = '#10181a';
+  for (const side of [-1, 1]) {
+    ctx.beginPath(); ctx.ellipse(side * sw * r * .75, side * r * .42, r * .42, r * .24, 0, 0, 7); ctx.fill();
+  }
+  // arms swing opposite to the feet
+  for (const side of [-1, 1]) {
+    let hx = -side * sw * r * .6 + r * .15, hy = side * r * 1.0;
+    if (armed && side === 1) {
+      if (swinging) { hx = r * 1.0; hy = r * .5; }
+      ctx.strokeStyle = '#c9d2d4'; ctx.lineWidth = .08; ctx.beginPath();
+      ctx.moveTo(hx, hy); ctx.lineTo(hx + r * 1.5, hy - r * .25); ctx.stroke();
+      ctx.strokeStyle = '#0e1213'; ctx.lineWidth = .05;
+    }
+    ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(hx, hy, r * .3, r * .26, 0, 0, 7); ctx.fill(); ctx.stroke();
+  }
+  // shoulders
+  ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, r * .6, r * 1.05, 0, 0, 7); ctx.fill(); ctx.stroke();
+  // head
+  ctx.fillStyle = head; ctx.beginPath(); ctx.arc(r * .1, 0, r * .52, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#0a0d0e'; ctx.fillRect(0, 0, vw, vh);
+  // On a map too big to read when fitted to the screen, zoom in and follow the runner during a run.
+  const fitS = S, fitOx = ox, fitOy = oy;
+  if ((mode === 'play' || mode === 'over') && S < MIN_TILE) {
+    S = MIN_TILE;
+    const follow = (pos, size, view) => size * S <= view ? (view - size * S) / 2
+      : Math.max(view - size * S, Math.min(0, view / 2 - pos * S));
+    ox = follow(runner.x, W, vw); oy = follow(runner.y, H, vh);
+  }
+  ctx.save(); ctx.translate(ox, oy); ctx.scale(S, S);
+
+  // Which floor is on screen: the one being edited, or the one the runner is on.
+  const vf = Math.min(FL.length - 1, mode === 'edit' ? edFloor : runner.floor);
+  // "layered" means this floor is being drawn over the one below, so its open air is left see-through.
+  const drawBase = layered => {
+    if (!layered) { ctx.fillStyle = '#161d1f'; ctx.fillRect(0, 0, W, H); }
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x; if (layered && VOID[i]) continue;
+      if (layered && DECK[i]) { drawDeck(x, y); continue; }           // a raised platform seen from the upper floor
+      if (layered) { ctx.fillStyle = '#20292c'; ctx.fillRect(x - .01, y - .01, 1.03, 1.03); }
+      if ((x + y) & 1) { ctx.fillStyle = layered ? '#252f33' : '#192124'; ctx.fillRect(x, y, 1, 1); }
+      const g = GROUND[i]; if (g) drawGround(g, x, y);
+    }
+  };
+
+  const c = chaser, r = runner;
+  const noChaser = $('optNoChaser').checked && (mode === 'play' || mode === 'over');
+  const drawMid = () => {
+  // scratch marks
+  marks = marks.filter(m => now - m.t < CFG.markLife);
+  ctx.lineCap = 'round'; ctx.lineWidth = .055;
+  for (const m of marks) {
+    if ((m.f || 0) !== vf) continue;
+    const al = 1 - (now - m.t) / CFG.markLife;
+    ctx.strokeStyle = 'rgba(255,122,60,' + (al * .85).toFixed(3) + ')';
+    const ca = Math.cos(m.a), sa = Math.sin(m.a);
+    ctx.beginPath();
+    for (let i = -1; i <= 1; i++) {
+      const ox2 = m.x - sa * i * .1, oy2 = m.y + ca * i * .1, len = i ? .16 : .22;
+      ctx.moveTo(ox2 - ca * len, oy2 - sa * len); ctx.lineTo(ox2 + ca * len, oy2 + sa * len);
+    }
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  // the glow that shines ahead of the chaser (walls are drawn over it)
+  if (mode !== 'menu' && mode !== 'edit' && c.state !== 'stun' && !noChaser && c.floor === vf) {
+    const R = 3.4, half = 0.5;
+    const g = ctx.createRadialGradient(c.x, c.y, 0.2, c.x, c.y, R);
+    g.addColorStop(0, 'rgba(226,60,45,.7)'); g.addColorStop(0.6, 'rgba(226,60,45,.3)');
+    g.addColorStop(1, 'rgba(226,60,45,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(c.x, c.y);
+    ctx.arc(c.x, c.y, R, c.face - half, c.face + half); ctx.closePath(); ctx.fill();
+  }
+  };
+
+  const drawSolid = layered => {
+  // walls
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (G[y * W + x] === 1) {
+    if (VOID[y * W + x]) { if (!layered) { ctx.fillStyle = '#0a0d0e'; ctx.fillRect(x - .01, y - .01, 1.03, 1.03); } continue; }
+    if (PROP[y * W + x]) continue;
+    ctx.fillStyle = '#3b4a4e'; ctx.fillRect(x, y, 1.02, 1.02);
+    ctx.fillStyle = '#4a5c61'; ctx.fillRect(x, y, 1.02, 0.14);
+  }
+  // half-triangle walls
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (TRI[y * W + x]) drawTri(x, y, TRI[y * W + x]);
+  // solid props (bushes are drawn later, over the people standing in them)
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const pch = PROP[y * W + x];
+    if (pch && pch !== 'G') { if (HILL[y * W + x]) drawHillTile(x, y); else drawProp(pch, x, y); }
+  }
+  // flickering firelight around burn barrels
+  const tFire = performance.now() / 1000;
+  ctx.globalCompositeOperation = 'lighter';
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (PROP[y * W + x] === 'B') {
+    const fl = 0.86 + 0.09 * Math.sin(tFire * 9.1 + x * 1.7 + y * 2.3) + 0.05 * Math.sin(tFire * 23 + x * 3.1), rad = 2.6 * fl;
+    const fg = ctx.createRadialGradient(x + .5, y + .5, 0.1, x + .5, y + .5, rad);
+    fg.addColorStop(0, 'rgba(255,150,50,' + (0.42 * fl).toFixed(3) + ')'); fg.addColorStop(0.45, 'rgba(255,110,30,.14)'); fg.addColorStop(1, 'rgba(255,90,20,0)');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(x + .5, y + .5, rad, 0, 7); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  for (const o of OBJS) drawObj(o);   // cars and large crates
+
+  // windows, pallets, gates and hatches
+  for (const s of specials) {
+    const hz = s.axis === 'y'; // sits in a horizontal wall
+    ctx.save(); ctx.translate(s.x + .5, s.y + .5);
+    if (s.diag) ctx.rotate(s.diag === 1 ? -Math.PI / 4 : Math.PI / 4);
+    else if (!hz && (s.type === 'window' || s.type === 'pallet')) ctx.rotate(Math.PI / 2);
+    if (s.type === 'locker') {
+      const mine = runner.hidden === s, checking = chaser.state === 'check' && chaser.lockerTarget === s;
+      ctx.fillStyle = '#9a2f28'; ctx.fillRect(-.4, -.46, .8, .92);                                // red doors
+      ctx.strokeStyle = '#2b3033'; ctx.lineWidth = .09; ctx.strokeRect(-.4, -.46, .8, .92);     // dark grey outline
+      ctx.beginPath(); ctx.moveTo(0, -.46); ctx.lineTo(0, .46); ctx.stroke();                     // the two doors
+      ctx.strokeStyle = '#5e1a15'; ctx.lineWidth = .04; ctx.beginPath();
+      for (const dx of [-.2, .2]) for (const dy of [-.28, -.2, -.12]) { ctx.moveTo(dx - .1, dy); ctx.lineTo(dx + .1, dy); }   // vents
+      ctx.stroke();
+      ctx.fillStyle = '#d9c9a8'; ctx.fillRect(-.07, .02, .04, .12); ctx.fillRect(.03, .02, .04, .12);   // handles
+      if (mine) { ctx.fillStyle = '#4fd1b5'; ctx.beginPath(); ctx.arc(-.2, .3, .06, 0, 7); ctx.arc(.2, .3, .06, 0, 7); ctx.fill(); }
+      if (checking) { ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .08; ctx.strokeRect(-.46, -.5, .92, 1); }
+    } else if (s.type === 'task') {
+      const done = s.state === 'done';
+      ctx.fillStyle = '#2f3a3e'; ctx.fillRect(-.42, -.42, .84, .84);
+      ctx.strokeStyle = '#11181a'; ctx.lineWidth = .07; ctx.strokeRect(-.42, -.42, .84, .84);
+      ctx.fillStyle = '#566468'; ctx.fillRect(-.3, -.3, .6, .22);                      // panel
+      ctx.fillStyle = done ? '#4fd1b5' : '#e2503f'; ctx.beginPath(); ctx.arc(.2, .14, .11, 0, 7); ctx.fill();   // status light
+      ctx.fillStyle = '#0e1213'; ctx.fillRect(-.34, .02, .36, .12);
+      ctx.fillStyle = done ? '#4fd1b5' : '#f0b648'; ctx.fillRect(-.34, .02, .36 * (done ? 1 : Math.min(1, s.prog / CFG.taskTime)), .12);
+    } else if (s.type === 'gate') {
+      const open = s.state === 'open', locked = !open && mode !== 'edit' && mode !== 'menu' && tasksLeft() > 0;
+      ctx.fillStyle = open ? '#1d4a3c' : locked ? '#2b2f31' : '#4a2a26'; ctx.fillRect(-.5, -.5, 1.02, 1.02);
+      ctx.fillStyle = open ? '#4fd1b5' : locked ? '#596266' : '#8a4a40';
+      if (open) { ctx.fillRect(-.3, -.06, .6, .12); ctx.fillRect(-.06, -.3, .12, .6); }
+      else for (let i = 0; i < 4; i++) ctx.fillRect(-.4 + i * .24, -.4, .1, .8);
+      if (!open && s.prog > 0) {
+        ctx.fillStyle = '#0e1213'; ctx.fillRect(-.45, .3, .9, .14);
+        ctx.fillStyle = '#f0b648'; ctx.fillRect(-.45, .3, .9 * Math.min(1, s.prog / CFG.gateTime), .14);
+      }
+    } else if (s.type === 'hatch') {
+      const open = mode !== 'edit' && mode !== 'menu' && hatchOpen();
+      ctx.fillStyle = '#2a3336'; ctx.fillRect(-.42, -.42, .84, .84);
+      ctx.fillStyle = open ? '#05080a' : '#3d4a4e'; ctx.fillRect(-.33, -.33, .66, .66);
+      ctx.strokeStyle = open ? '#4fd1b5' : '#5a6b70'; ctx.lineWidth = .06; ctx.strokeRect(-.33, -.33, .66, .66);
+      if (!open) { ctx.beginPath(); ctx.moveTo(-.33, 0); ctx.lineTo(.33, 0); ctx.stroke(); }
+    } else if (s.type === 'window') {
+      const jam = now < s.jamUntil;
+      ctx.fillStyle = '#3b4a4e'; ctx.fillRect(-.5, -.5, .16, 1); ctx.fillRect(.34, -.5, .16, 1);
+      ctx.fillStyle = jam ? '#e2503f' : '#6fd3e8'; ctx.fillRect(-.34, -.09, .68, .18);
+      if (jam) { ctx.fillStyle = 'rgba(226,80,63,.3)'; ctx.fillRect(-.34, -.5, .68, 1); }
+      else for (let i = 0; i < s.vaults; i++) { ctx.fillStyle = '#f0b648'; ctx.fillRect(-.26 + i * .2, -.36, .12, .12); }
+    } else if (s.diag) {
+      // diagonal pallet: local x runs along it, corner to corner
+      if (s.state === 'up') {
+        ctx.strokeStyle = 'rgba(217,164,65,.35)'; ctx.lineWidth = .05; ctx.setLineDash([.12, .1]);
+        ctx.beginPath(); ctx.moveTo(-.62, 0); ctx.lineTo(.62, 0); ctx.stroke(); ctx.setLineDash([]);   // where it will fall
+        ctx.fillStyle = '#d9a441'; ctx.fillRect(-.66, -.13, .3, .26);
+        ctx.fillStyle = '#b3812a'; ctx.fillRect(-.66, -.13, .07, .26); ctx.fillRect(-.43, -.13, .07, .26);
+      } else if (s.state === 'down') {
+        ctx.fillStyle = '#d9a441'; ctx.fillRect(-.64, -.13, 1.28, .26);
+        ctx.fillStyle = '#b3812a'; for (let i = 0; i < 5; i++) ctx.fillRect(-.58 + i * .27, -.13, .05, .26);
+      } else {
+        ctx.fillStyle = 'rgba(179,129,42,.45)';
+        ctx.fillRect(-.5, -.08, .22, .08); ctx.fillRect(.1, .04, .25, .08); ctx.fillRect(-.1, -.14, .08, .2); ctx.fillRect(.35, -.1, .08, .2);
+      }
+    } else if (s.state === 'up') {
+      ctx.fillStyle = '#d9a441'; ctx.fillRect(-.5, -.5, .16, 1);
+      ctx.fillStyle = '#b3812a'; ctx.fillRect(-.5, -.5, .16, .12); ctx.fillRect(-.5, .38, .16, .12);
+    } else if (s.state === 'down') {
+      ctx.fillStyle = '#d9a441'; ctx.fillRect(-.5, -.2, 1, .4);
+      ctx.fillStyle = '#b3812a'; for (let i = 0; i < 4; i++) ctx.fillRect(-.44 + i * .25, -.2, .05, .4);
+    } else {
+      ctx.fillStyle = 'rgba(179,129,42,.45)';
+      ctx.fillRect(-.4, -.3, .22, .08); ctx.fillRect(.1, .1, .25, .08); ctx.fillRect(-.1, .25, .08, .2); ctx.fillRect(.2, -.35, .08, .2);
+    }
+    ctx.restore();
+  }
+
+  // staircases between the floors: steps, and an arrow for which way they take you
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (STAIR[y * W + x]) drawStairs(x, y, STAIR[y * W + x] - 1, curFloor === 0);
+  // railings; on the ground floor, also the ones round the edge of a raised platform
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x;
+    if (RAIL[i]) drawRail(x, y, RAIL[i]);
+    if (curFloor === 0 && FL[1] && FL[1].RAIL[i] && (PROP[i] === 'D' || FL[1].DECK[i])) drawRail(x, y, FL[1].RAIL[i]);
+  }
+  };
+
+  // Draw the ground floor dimmed underneath when the upper floor is on screen, then the floor itself.
+  if (vf === 1) {
+    useFloor(0); drawBase(false); drawSolid(false);
+    ctx.fillStyle = 'rgba(8,11,12,.6)'; ctx.fillRect(0, 0, W, H);
+  }
+  useFloor(vf);
+  drawBase(vf === 1); drawMid(); drawSolid(vf === 1);
+
+  if ($('optPath').checked && c.path && mode === 'play') {
+    ctx.strokeStyle = 'rgba(226,80,63,.5)'; ctx.lineWidth = .08; ctx.setLineDash([.25, .2]);
+    ctx.beginPath(); let pen = false; const NN = W * H;
+    if (c.floor === vf) { ctx.moveTo(c.x, c.y); pen = true; }
+    for (let j = 1; j < c.path.length; j++) {
+      const fj = (c.path[j] / NN) | 0, ij = c.path[j] - fj * NN;
+      if (fj !== vf) { pen = false; continue; }
+      if (pen) ctx.lineTo((ij % W) + .5, ((ij / W) | 0) + .5); else { ctx.moveTo((ij % W) + .5, ((ij / W) | 0) + .5); pen = true; }
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // runner
+  const rMoving = mode === 'play' && (r.vault || r.vx || r.vy);
+  const rShown = !r.hidden && r.floor === vf;   // not drawn while hiding, or while the editor shows the other floor
+  if (rShown) drawPerson(r.x, r.y, r.face, r.r, '#4fd1b5', '#e8c9a0', rMoving ? now * (r.running || r.vault ? 16 : 9) : null, false);
+  if (r.hp < 2 && rShown) { ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .07; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .08, 0, 7); ctx.stroke(); }
+  if (r.boost > 0 && rShown) { ctx.strokeStyle = 'rgba(79,209,181,.5)'; ctx.lineWidth = .05; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .15, 0, 7); ctx.stroke(); }
+
+  // chaser: hidden behind walls unless the aid is on
+  const visible = c.sees || mode !== 'play';
+  if ((visible || $('optAura').checked) && !noChaser && c.floor === vf) {
+    ctx.globalAlpha = visible ? 1 : 0.4;
+    const cMoving = mode === 'play' && (c.state === 'chase' || c.state === 'lunge' || c.state === 'cool' || c.state === 'vault');
+    drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : c.state === 'lunge' ? '#ff6a55' : '#b3261a',
+               '#2a1513', cMoving ? now * (c.state === 'cool' ? 6 : 16) : null, true, c.state === 'lunge');
+    if (c.state === 'break' || c.state === 'stun' || c.state === 'cool') {
+      const full = c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : CFG.hitCool;
+      ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .08; ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r + .2, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0, Math.min(1, c.t / full))); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // bushes and corn go on top so anyone inside looks hidden
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (PROP[y * W + x] === 'G') drawProp('G', x, y);
+    if (GROUND[y * W + x] === 'c' && G[y * W + x] !== 1) drawCorn(x, y);
+  }
+  if (mode === 'edit') {
+    ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = .02; ctx.beginPath();
+    for (let x = 1; x < W; x++) { ctx.moveTo(x, 1); ctx.lineTo(x, H - 1); }
+    for (let y = 1; y < H; y++) { ctx.moveTo(1, y); ctx.lineTo(W - 1, y); }
+    ctx.stroke();
+    if (hoverF && tool.startsWith('obj:') && OBJ_TYPES[tool.slice(4)] && objAtPos(MAPS[mapIdx], hoverF[0], hoverF[1]) < 0) {   // ghost of the car or crate
+      ctx.globalAlpha = .6; drawObj({ t: tool.slice(4), x: snapHalf(hoverF[0]) + 1, y: snapHalf(hoverF[1]) + 1, a: objAngle }); ctx.globalAlpha = 1;
+    }
+    if (hover && tool === 'tri') {           // ghost of the half wall
+      const cur = MAPS[mapIdx].rows[hover[1]][hover[0]], t = TRI_CHARS.includes(cur) && cur.length === 1 ? (TRI_CHARS.indexOf(cur) + 1) % 4 : triCorner;
+      ctx.globalAlpha = .6; drawTri(hover[0] + 1, hover[1] + 1, t + 1); ctx.globalAlpha = 1;
+    }
+    if (hover && tool === 'P' && palDiag) {  // ghost of the diagonal pallet, lying where it would fall
+      ctx.save(); ctx.translate(hover[0] + 1.5, hover[1] + 1.5); ctx.rotate(palDiag === 1 ? -Math.PI / 4 : Math.PI / 4);
+      ctx.globalAlpha = .6; ctx.fillStyle = '#d9a441'; ctx.fillRect(-.64, -.13, 1.28, .26); ctx.globalAlpha = 1; ctx.restore();
+    }
+    if (hover && isStairCh(tool)) {          // show which way the staircase will climb
+      ctx.globalAlpha = .7; drawStairs(hover[0] + 1, hover[1] + 1, STAIR_CHARS.indexOf(tool), true); ctx.globalAlpha = 1;
+    }
+    if (hover && tool === 'stamp' && stampRows) {
+      const [x0, y0] = stampOrigin(hover), bad = stampBlocked(hover);
+      for (let y = 0; y < stampRows.length; y++) for (let x = 0; x < stampRows[0].length; x++) {
+        const ch = stampRows[y][x]; if (ch === '.') continue;
+        ctx.fillStyle = bad ? 'rgba(226,80,63,.7)' : ch === '#' ? 'rgba(160,185,190,.55)' : ch === 'W' ? 'rgba(111,211,232,.7)' : 'rgba(217,164,65,.75)';
+        ctx.fillRect(x0 + x + 1, y0 + y + 1, 1, 1);
+      }
+    } else if (hover) { ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .07; ctx.strokeRect(hover[0] + 1, hover[1] + 1, 1, 1); }
+    if (ws) {
+      ctx.setLineDash([.5, .35]); ctx.strokeStyle = '#4fd1b5'; ctx.lineWidth = .1;
+      ctx.strokeRect(ws.ox + 1, ws.oy + 1, ws.w, ws.h); ctx.setLineDash([]);
+    }
+    if (outCells.length) {
+      ctx.fillStyle = 'rgba(240,182,72,.65)';
+      let x0 = 999, y0 = 999, x1 = 0, y1 = 0;
+      for (const o of outCells) {
+        ctx.fillRect(o[0] + 1, o[1] + 1, 1, 1);
+        x0 = Math.min(x0, o[0]); x1 = Math.max(x1, o[0]); y0 = Math.min(y0, o[1]); y1 = Math.max(y1, o[1]);
+      }
+      ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .08; ctx.strokeRect(x0 + 1, y0 + 1, x1 - x0 + 1, y1 - y0 + 1);
+    }
+    if (tool === 'select') {
+      ctx.fillStyle = 'rgba(79,209,181,.55)'; ctx.strokeStyle = '#4fd1b5'; ctx.lineWidth = .08;
+      for (const k of selSet) { ctx.fillRect(k % 1000 + 1, ((k / 1000) | 0) + 1, 1, 1); ctx.strokeRect(k % 1000 + 1, ((k / 1000) | 0) + 1, 1, 1); }
+      if (painting === 5 && moveD && (moveD[0] || moveD[1])) {   // ghost of where a dragged piece will land
+        const cells = selCells(), out = cells.map(([x, y, ch]) => [x + moveD[0], y + moveD[1], ch]);
+        ctx.fillStyle = canRelocate(cells, out) ? 'rgba(226,80,63,.6)' : 'rgba(240,182,72,.6)';
+        for (const [x, y] of out) ctx.fillRect(x + 1, y + 1, 1, 1);
+      }
+      if (sel && painting === 4 && (sel[0] !== sel[2] || sel[1] !== sel[3])) {
+        ctx.setLineDash([.3, .2]); ctx.lineWidth = .1;
+        ctx.strokeRect(sel[0] + 1, sel[1] + 1, sel[2] - sel[0] + 1, sel[3] - sel[1] + 1); ctx.setLineDash([]);
+      }
+    }
+  }
+  ctx.restore();
+
+  // floating labels + prompt (screen space)
+  ctx.textAlign = 'center'; ctx.font = '600 ' + Math.max(11, S * .5) + 'px "Segoe UI", system-ui, sans-serif';
+  for (const f of floaters) {
+    ctx.globalAlpha = Math.max(0, 1 - f.t / 1.1); ctx.fillStyle = f.color;
+    ctx.fillText(f.text, ox + f.x * S, oy + (f.y - f.t * .9) * S);
+  }
+  ctx.globalAlpha = 1;
+  if (mode === 'play' && r.hidden) {
+    ctx.fillStyle = '#d9e2e0';
+    ctx.fillText((lastSrc === 'pad' ? 'A' : lastSrc === 'touch' ? 'ACTION' : 'SPACE') + ': get out', ox + (r.hidden.x + .5) * S, oy + (r.hidden.y - .25) * S);
+  } else if (mode === 'play' && !r.vault) {
+    const [dx, dy] = inputDir(), a = nearestAction(dx, dy);
+    if (a) {
+      ctx.fillStyle = a.kind === 'jam' ? '#e2503f' : '#d9e2e0';
+      const btn = lastSrc === 'pad' ? 'A' : lastSrc === 'touch' ? 'ACTION' : 'SPACE';
+      ctx.fillText(a.kind === 'drop' ? btn + ': drop' : a.kind === 'jam' ? 'jammed'
+                   : a.kind === 'gate' ? 'hold ' + btn + ': open gate ' + Math.floor(100 * a.s.prog / CFG.gateTime) + '%'
+                   : a.kind === 'locker' ? btn + ': hide'
+                   : a.kind === 'gateLocked' ? 'locked: ' + tasksLeft() + ' task' + (tasksLeft() === 1 ? '' : 's') + ' left'
+                   : a.kind === 'task' ? 'hold ' + btn + ': task ' + Math.floor(100 * a.s.prog / CFG.taskTime) + '%'
+                   : a.kind === 'hatch' ? btn + ': escape' : a.kind === 'hatchShut' ? 'hatch shut' : btn + ': vault',
+                   ox + (a.s.x + .5) * S, oy + (a.s.y - .25) * S);
+    }
+  }
+  if (flash > 0) { ctx.fillStyle = 'rgba(226,60,45,' + (flash * .35) + ')'; ctx.fillRect(0, 0, vw, vh); }
+  S = fitS; ox = fitOx; oy = fitOy;   // the editor and menu always use the whole-map fit
+}
+
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  pollPad();
+  $('touch').classList.toggle('hide', !(touchSeen && mode === 'play'));
+  if (mode === 'play') { update(dt / 2); if (mode === 'play') update(dt / 2); }
+  for (const f of floaters) f.t += dt; floaters = floaters.filter(f => f.t < 1.1);
+  if (flash > 0) flash -= dt * 2;
+  if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').textContent = ''; }
+  if (mode === 'play') updateHud();
+  draw(); requestAnimationFrame(frame);
+}
+
+/* ---------- UI ---------- */
+function buildDrills() {
+  $('drills').innerHTML = MAPS.map((m, i) => {
+    const b = getBest(i, diffKey);
+    return '<button class="drill' + (i === mapIdx ? ' on' : '') + '" data-i="' + i + '">' +
+      '<span class="best">' + (b ? b.toFixed(1) + 's' : '') + '</span><b>' + esc(m.name) +
+      (m.custom ? '<span class="tag">custom</span>' : '') + '</b><small>' + m.desc + '</small></button>';
+  }).join('');
+  $('drillBtns').innerHTML = '<button data-a="new">+ New drill</button>' + (MAPS[mapIdx].custom
+    ? '<button data-a="edit">Edit</button><button data-a="del">' + (delArmed ? 'Really delete?' : 'Delete') + '</button>'
+    : '<button data-a="copy">Copy &amp; edit</button>');
+  for (const b of document.querySelectorAll('#diff button')) b.classList.toggle('on', b.dataset.d === diffKey);
+}
+$('drills').addEventListener('click', e => {
+  const b = e.target.closest('.drill'); if (!b) return;
+  mapIdx = +b.dataset.i; delArmed = false; store('lt_map', mapIdx); buildDrills(); showMenu(); b.blur();
+  document.querySelector('aside').classList.remove('open');
+});
+$('drillBtns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const a = b.dataset.a;
+  if (a === 'new') newDrill(false);
+  else if (a === 'copy') newDrill(true);
+  else if (a === 'edit') enterEdit();
+  else if (a === 'del') {
+    if (!delArmed) { delArmed = true; buildDrills(); return; }
+    MAPS.splice(mapIdx, 1); mapIdx = 0; delArmed = false; saveCustom(); store('lt_map', 0); buildDrills(); showMenu();
+  }
+});
+$('tools').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  setTool(b.dataset.t);
+});
+loadStamps(); fillStampSelect();
+$('edStamp').addEventListener('change', e => {
+  const v = e.target.value, s = allStamps()[v]; e.target.blur();
+  if (!s) { setTool('#'); return; }
+  setTool('stamp'); e.target.value = v;
+  const w = Math.max(...s.rows.map(r => r.length));
+  stampRows = s.rows.map(r => r.padEnd(w, '.')); $('stName').value = s.name;
+  edMsg('Click to place "' + s.name + '". To change it: place it, edit it, select it with Select structure, then Save stamp with the same name.');
+});
+$('edItem').addEventListener('change', e => {
+  const v = e.target.value; e.target.blur();
+  if (!v) { setTool('#'); return; }
+  if (OBJ_TYPES[v]) {
+    setTool('obj:' + v); e.target.value = v;
+    edMsg(OBJ_TYPES[v].name + ': click to place it. Press R to turn it 45° at a time (eight directions, including diagonals). Click one already on the map to turn it; right-click or Erase removes it. It blocks movement but can be seen over.');
+    return;
+  }
+  setTool(v); e.target.value = v;
+  edMsg(v === 'E' ? 'Exit gate: click to place, ideally in a gap in a wall. In a run, hold the action button next to it for ' + CFG.gateTime + ' s to open it, then run through to escape.'
+      : v === 'J' ? 'Task box: click to place as many as you like. In a run, hold the action button next to one for ' + CFG.taskTime + ' s to finish it. Exit gates stay locked until every task box is done, and finishing one makes a noise the chaser comes to check.'
+      : v === 'L' ? 'Locker: click to place. In a run, press the action button next to it to hide and again to get out. If the chaser saw you get in, or your scratch marks lead to it, it will open the door.'
+      : v === 'K' ? 'Rock: click or drag to place. Four or more rocks touching merge into a hill you can drop off. Add Rock slope tiles to choose where you walk up; with none, it puts a slope on the left side for you.'
+      : v === 'S' ? 'Rock slope: place it on the edge of a group of rocks, where you want the way up. Once a group has any slope tiles, those are its only ways up. You can add several.'
+      : v === 'U' ? 'Staircase: click to place one. It climbs up the screen (north) to start with; press R to turn it. You walk on at the bottom end and off at the top end upstairs; the other sides are closed. Then press "Upper floor" to build the floor above.'
+      : v === 'D' ? 'Raised platform: drag to build a deck. It stands at upper-floor height, so it joins straight onto upper-floor tiles next to it. Reach it by Stairs tiles touching it or from the upper floor, and drop off any edge without a railing.'
+      : v === 'A' ? 'Stairs: place next to a raised platform. They climb toward the platform, so walk on from the opposite side. You can add several sets.'
+      : v === 'H' ? 'Hatch: click to place. It opens once you have spent ' + CFG.hatchAfter + ' s in chase; stand on it and press the action button to escape.'
+      : v === '?' ? 'Random prop: click or drag over empty floor to scatter trees, rocks, crates, barrels and bushes.'
+      : 'Click or drag to place. Right-drag erases.');
+});
+$('edGround').innerHTML = '<option value="">Paint ground…</option><option value=".">Plain floor</option>' +
+  Object.keys(GROUNDS).map(k => '<option value="' + k + '">' + GROUNDS[k] + '</option>').join('');
+$('edGround').addEventListener('change', e => {
+  const v = e.target.value; e.target.blur();
+  if (!v) { setTool('#'); return; }
+  setTool('g:' + v); e.target.value = v;
+  edMsg('Ground: drag to paint ' + (v === '.' ? 'plain floor' : GROUNDS[v].toLowerCase()) + ' under whatever is there. Right-drag puts plain floor back. Walls and items are not affected.');
+});
+$('edGroundFill').addEventListener('click', e => {
+  e.target.blur(); if (!tool.startsWith('g:')) return;
+  const m = MAPS[mapIdx], gch = tool[2];
+  m.ground = groundRows(m).map(r => gch.repeat(r.length)); saveCustom(); loadMap();
+  edMsg('Filled the whole map with ' + (gch === '.' ? 'plain floor' : GROUNDS[gch].toLowerCase()) + '. Paint other ground over it wherever you like.');
+});
+$('stSave').addEventListener('click', e => { e.target.blur(); saveStamp(); });
+$('stDel').addEventListener('click', e => { e.target.blur(); deleteStamp(); });
+const doRotate = () => {
+  if (tool === 'tri') {            // which corner of the tile the half wall fills
+    triCorner = (triCorner + 1) % 4;
+    edMsg('Half wall now fills the ' + ['top-left', 'top-right', 'bottom-right', 'bottom-left'][triCorner] + ' corner. Click to place; click one already there to turn it.');
+    return;
+  }
+  if (tool === 'P') {              // pallet: in a wall gap, or lying diagonally either way
+    palDiag = (palDiag + 1) % 3;
+    edMsg(['Pallet set to fit a gap in a wall (straight).', 'Pallet set diagonal: bottom-left to top-right ( / ).', 'Pallet set diagonal: top-left to bottom-right ( \\ ).'][palDiag] + ' Press R to change.');
+    return;
+  }
+  if (tool.startsWith('obj:')) {   // turn the car or crate you are about to place, 45 degrees at a time
+    objAngle = (objAngle + 1) & 7;
+    edMsg('Turned to ' + (objAngle * 45) + '°. Click to place it; click one already on the map to turn that one.');
+    return;
+  }
+  if (isStairCh(tool)) {           // turn the staircase you are about to place
+    const i = (STAIR_CHARS.indexOf(tool) + 1) % 4; tool = STAIR_CHARS[i];
+    edMsg('Staircase now climbs ' + ['up the screen (north)', 'to the right (east)', 'down the screen (south)', 'to the left (west)'][i] +
+          '. Click to place it; click an existing staircase to turn it this way.');
+    return;
+  }
+  if (!transformSelection('rotate')) rotateStamp();
+};
+const doMirror = () => { if (!transformSelection('mirror')) mirrorStamp(); };
+$('edRot').addEventListener('click', e => { doRotate(); e.target.blur(); });
+$('edMir').addEventListener('click', e => { doMirror(); e.target.blur(); });
+$('edName').addEventListener('input', e => {
+  MAPS[mapIdx].name = e.target.value.slice(0, 30) || 'My drill'; saveCustom(); buildDrills();
+});
+$('edW').addEventListener('change', resizeDrill);
+$('edH').addEventListener('change', resizeDrill);
+$('edClear').addEventListener('click', () => {
+  if (ws) setTool('#');
+  const m = MAPS[mapIdx]; m.rows = m.rows.map(r => r.replace(/[#WPTKXBGEHJLSDAFNQV12]/g, '.')); saveCustom(); loadMap();
+});
+$('edFloor0').addEventListener('click', e => { e.target.blur(); setEdFloor(0); });
+$('edFloor1').addEventListener('click', e => { e.target.blur(); setEdFloor(1); });
+$('edOutSave').addEventListener('click', e => { e.target.blur(); commitOutline(); });
+$('edOutClear').addEventListener('click', e => { e.target.blur(); outCells = []; outStrokes = 0; outStarts = []; edMsg('Outline cleared. Draw again.'); });
+$('edTest').addEventListener('click', e => { e.target.blur(); startRun(); });
+$('edDone').addEventListener('click', () => { buildDrills(); showMenu(); });
+// pointer events cover mouse, pen and touch, so the editor works on a touchscreen too
+cv.addEventListener('pointerdown', e => {
+  if (mode !== 'edit') return;
+  e.preventDefault();
+  const p = cellFromEvent(e);
+  if (tool === 'outline') { if (p && e.button !== 2) { painting = 3; outStarts.push(outCells.length); outCells.push(p); outStrokes++; } return; }   // each press starts a new stroke
+  if (tool === 'select') {
+    if (p && e.button !== 2) {
+      if (!e.shiftKey && selSet.has(p[1] * 1000 + p[0])) { painting = 5; selA = p; moveD = [0, 0]; }   // drag a selected piece to move it
+      else { painting = 4; selA = p; selAdd = e.shiftKey; sel = [p[0], p[1], p[0], p[1]]; }
+    }
+    return;
+  }
+  if (tool === 'stamp' && e.button !== 2) { placeStamp(e); return; }
+  if (tool === 'rail') { toggleRail(e, e.button === 2); return; }
+  if (tool.startsWith('obj:')) { placeObj(e, e.button === 2); return; }
+  painting = e.button === 2 ? 2 : 1; lastPaint = null; paintAt(e, painting === 2);
+});
+cv.addEventListener('pointermove', e => {
+  if (mode !== 'edit') return;
+  const p = cellFromEvent(e); hoverF = p ? evPos(e) : null;
+  if (painting === 3) { hover = p; if (p) addOutline(p); }
+  else if (painting === 4) {
+    hover = p;
+    if (p) sel = [Math.min(selA[0], p[0]), Math.min(selA[1], p[1]), Math.max(selA[0], p[0]), Math.max(selA[1], p[1])];
+  }
+  else if (painting === 5) { hover = p; if (p) moveD = [p[0] - selA[0], p[1] - selA[1]]; }
+  else if (painting) paintAt(e, painting === 2); else hover = p;
+});
+cv.addEventListener('pointerleave', () => { hover = null; });
+cv.addEventListener('contextmenu', e => { if (mode === 'edit') e.preventDefault(); });
+const endDrag = () => {
+  const was = painting; painting = 0;
+  if (mode !== 'edit') return;
+  if (was === 3) edMsg('Keep drawing to add to the outline, or press Save outline to apply it. Clear outline starts again.');
+  if (was === 4 && sel) finishSelect();
+  if (was === 5) { const d = moveD; moveD = null; if (d && (d[0] || d[1])) moveSelection(d[0], d[1]); }
+};
+addEventListener('pointerup', endDrag);
+addEventListener('pointercancel', endDrag);
+
+/* ---------- Touch controls (shown during a run once a touch is seen) ---------- */
+let touchSeen = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+addEventListener('pointerdown', e => { if (e.pointerType === 'touch') touchSeen = true; }, true);
+const stickEnd = e => {
+  if (e.pointerId !== touch.id) return;
+  touch.id = null; touch.x = touch.y = 0; $('stickBase').classList.add('hide');
+};
+$('stickZone').addEventListener('pointerdown', e => {
+  if (touch.id !== null) return;
+  e.preventDefault(); touch.id = e.pointerId; touch.ox = e.clientX; touch.oy = e.clientY;
+  try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+  const wr = $('wrap').getBoundingClientRect(), base = $('stickBase');
+  base.style.left = (e.clientX - wr.left) + 'px'; base.style.top = (e.clientY - wr.top) + 'px';
+  base.classList.remove('hide'); $('stickKnob').style.transform = 'translate(-50%, -50%)';
+});
+$('stickZone').addEventListener('pointermove', e => {
+  if (e.pointerId !== touch.id) return;
+  let dx = (e.clientX - touch.ox) / 55, dy = (e.clientY - touch.oy) / 55;
+  const l = Math.hypot(dx, dy);
+  if (l > 1) { dx /= l; dy /= l; }
+  $('stickKnob').style.transform = 'translate(calc(-50% + ' + dx * 45 + 'px), calc(-50% + ' + dy * 45 + 'px))';
+  if (l < 0.25) { touch.x = touch.y = 0; } else { const n = Math.hypot(dx, dy); touch.x = dx / n; touch.y = dy / n; lastSrc = 'touch'; }
+});
+$('stickZone').addEventListener('pointerup', stickEnd);
+$('stickZone').addEventListener('pointercancel', stickEnd);
+$('tAct').addEventListener('pointerdown', e => {
+  e.preventDefault(); touch.act = true; lastSrc = 'touch'; if (mode === 'play') spacePressed = true;
+  try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+});
+for (const ev of ['pointerup', 'pointercancel']) $('tAct').addEventListener(ev, () => { touch.act = false; });
+$('tRun').addEventListener('pointerdown', e => {
+  e.preventDefault(); touch.run = !touch.run;
+  e.target.textContent = touch.run ? 'RUN' : 'WALK'; e.target.classList.toggle('on', touch.run);
+});
+$('dataBtns').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  b.blur();
+  const a = b.dataset.a;
+  if (a === 'export') {
+    const url = URL.createObjectURL(new Blob([exportData()], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'loop-trainer-export.json';
+    document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+    dataMsg('Saved loop-trainer-export.json to your downloads. If nothing downloaded, use Copy instead.');
+  } else if (a === 'copy') {
+    try { await navigator.clipboard.writeText(exportData()); dataMsg('Copied. In the other browser, press Paste.'); }
+    catch (err) { dataMsg('This browser wouldn\'t allow copying. Use Export file instead.'); }
+  } else if (a === 'import') { $('dataFile').value = ''; $('dataFile').click(); }
+  else if (a === 'paste') {
+    try { importData(await navigator.clipboard.readText()); }
+    catch (err) { dataMsg('This browser wouldn\'t allow pasting. Use Import file instead.'); }
+  }
+});
+$('dataFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => importData(String(rd.result));
+  rd.onerror = () => dataMsg('Couldn\'t read that file.');
+  rd.readAsText(f);
+});
+$('overlay').addEventListener('click', () => { if (mode === 'menu' || mode === 'over') startRun(); });
+$('menuBtn').addEventListener('click', () => { document.querySelector('aside').classList.toggle('open'); });
+addEventListener('gamepadconnected', () => { if (mode !== 'edit') say('Controller connected'); });
+$('diff').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  diffKey = b.dataset.d; store('lt_diff', diffKey); buildDrills(); showMenu(); b.blur();
+});
+for (const id of ['optAura', 'optPath', 'optNoChaser']) {
+  $(id).checked = store('lt_' + id) === '1';
+  $(id).addEventListener('change', e => { store('lt_' + id, e.target.checked ? '1' : '0'); e.target.blur(); });
+}
+$('optShiftRun').checked = store('lt_optShiftRun') !== '0';
+$('optShiftRun').addEventListener('change', e => { store('lt_optShiftRun', e.target.checked ? '1' : '0'); e.target.blur(); });
+const GAME_KEYS = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD'];
+addEventListener('keydown', e => {
+  // typing in a name or size box must never be swallowed by the game keys
+  if (e.target.tagName === 'INPUT' && (e.target.type === 'text' || e.target.type === 'number')) return;
+  if (GAME_KEYS.includes(e.code)) e.preventDefault();
+  if (mode === 'edit') {
+    const b = document.querySelectorAll('#tools button')[parseInt(e.key, 10) - 1];
+    if (b) b.click();
+    if (e.code === 'KeyR') doRotate();
+    if (e.code === 'KeyM') doMirror();
+    const mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.code];
+    if (mv) moveSelection(mv[0], mv[1]);
+    return;
+  }
+  if (e.repeat) return;
+  if (e.code === 'KeyR') { startRun(); return; }
+  if (e.code === 'Space') { if (mode !== 'play') { startRun(); return; } spacePressed = true; }
+  keys.add(e.code);
+});
+addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('blur', () => keys.clear());
+addEventListener('resize', resize);
+// the editor bar grows and shrinks as its message changes; keep the canvas matched to the space it has
+if (window.ResizeObserver) new ResizeObserver(() => resize()).observe($('wrap'));
+
+loadCustom();
+const sm = parseInt(store('lt_map'), 10); if (sm >= 0 && sm < MAPS.length) mapIdx = sm;
+const sd = store('lt_diff'); if (DIFF[sd]) diffKey = sd;
+buildDrills(); showMenu(); requestAnimationFrame(frame);
+
+// test hook: step the simulation without the render loop
+window.LT = { get s() { return { runner, chaser, stats, mode, specials, now }; }, keys, update, startRun,
+              press() { spacePressed = true; } };
+</script>
+</body>
+</html>

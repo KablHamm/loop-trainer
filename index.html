@@ -148,7 +148,7 @@
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1>Loop <span>Trainer</span></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v0.9</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
@@ -255,6 +255,7 @@
         <option value="car">Car (turns diagonally)</option>
         <option value="B">Burn barrel (see over it, glows)</option>
         <option value="G">Bush (walk through, hides you)</option>
+        <option value="6">Hook (a tall post; run under its arm)</option>
         <option value="?">Random prop</option>
       </select>
       <select id="edGround"></select>
@@ -407,7 +408,7 @@ let W = 0, H = 0, G = null, VOID = null, spec = [], specials = [];
 let GROUND = [];
 const groundAt = (x, y) => GROUND[Math.floor(y) * W + Math.floor(x)];
 let SIGHT = null, PROP = [], hatchSaid = false;   // what blocks sight (1 always, 2 only from afar); prop letter per cell
-const STRUCT_RE = /[#WPTKXBGEHJLSDAFNQV12Z345]/;                 // anything placed on the map: walls, windows, pallets, items
+const STRUCT_RE = /[#WPTKXBGEHJLSDAFNQV12Z3456]/;                 // anything placed on the map: walls, windows, pallets, items
 const PROPS = 'TKXBG';
 let runner, chaser, stats, now = 0, mode = 'menu';
 let floaters = [], flash = 0, msgT = 0, marks = [];
@@ -503,6 +504,30 @@ function loadMap() {
   // (While the editor is showing the upper floor the two are swapped in the drill, so swap them back here.)
   const pairs = [[m.rows, groundRows(m), railRows(m)]];
   if (m.up) { pairs.push([m.up.rows, m.up.ground, m.up.rail]); if (m.swapped) pairs.reverse(); }
+  // A drill whose exit gate appears by itself (task boxes, and no gate placed by hand) is given a hidden margin of
+  // empty space all round when it is played, so there is room beyond the outer wall to build the exit zone.
+  // The editor never sees the margin, so tile positions there are unchanged.
+  const hasCh = ch => pairs.some(p => p[0].some(r => r.includes(ch)));
+  mapPad = mode !== 'edit' && hasCh('J') && !hasCh('E') ? 5 : 0;
+  if (mapPad) {
+    const M = mapPad, ow = Math.max(...pairs[0][0].map(r => r.length)), oh = pairs[0][0].length;
+    const pad = (rows, fill) => { const blank = fill.repeat(ow + M * 2);
+      return [...Array(M).fill(blank), ...rows.map(r => fill.repeat(M) + r.padEnd(ow, fill) + fill.repeat(M)), ...Array(M).fill(blank)]; };
+    const base = pairs[0][0];
+    pairs.forEach((p, f) => { pairs[f] = [pad(p[0], '~'), pad(p[1], '.'), pad(p[2], '0')]; });
+    // The ring just outside the drill becomes its outer wall, wherever the drill has open ground at its edge
+    // (an outline wall or empty space already is the edge, so nothing is added behind those).
+    const g0 = pairs[0][0], at = (x, y) => (base[y] && base[y][x]) || '~';
+    for (let y = -1; y <= oh; y++) for (let x = -1; x <= ow; x++) {
+      if (x >= 0 && y >= 0 && x < ow && y < oh) continue;
+      let touches = false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < ow && ny < oh && at(nx, ny) !== '~' && at(nx, ny) !== 'O') touches = true;
+      }
+      if (touches) g0[y + M] = setCh(g0[y + M], x + M, '#');
+    }
+  }
   const w = Math.max(...pairs[0][0].map(r => r.length));
   W = w + 2; H = pairs[0][0].length + 2; hatchSaid = false; FL = [];
   let rs = [2.5, 2.5], cs = [W - 2.5, H - 2.5];
@@ -528,8 +553,8 @@ function loadMap() {
     }
     else if (ch === '~') { G[i] = 1; SIGHT[i] = 1; VOID[i] = 1; }   // outside the map's outline: blocks like a wall, drawn as nothing
     else if (isStairCh(ch)) STAIR[i] = 1 + STAIR_CHARS.indexOf(ch);   // staircase between the floors; the letter says which way it climbs
-    else if ('TKXBSDA'.includes(ch)) {   // tree, rock, crate, barrel, rock slope, platform, platform stairs: solid here
-      G[i] = 1; PROP[i] = ch; if (ch !== 'B' && ch !== 'D' && ch !== 'A') SIGHT[i] = 1;   // barrels and platforms are low enough to see over
+    else if ('TKXBSDA6'.includes(ch)) {   // tree, rock, crate, barrel, rock slope, platform, platform stairs, hook: solid here
+      G[i] = 1; PROP[i] = ch; if (ch !== 'B' && ch !== 'D' && ch !== 'A' && ch !== '6') SIGHT[i] = 1;   // barrels and platforms are low enough to see over
     } else if (ch === 'G') { PROP[i] = ch; SIGHT[i] = 2; }            // bush: walk through it, hides you from a distance
     else if (ch === 'E' || ch === 'H' || ch === 'J' || LOCK_DIR[ch] !== undefined) {   // a locker's letter says which way its doors face
       const s = { type: ch === 'E' ? 'gate' : ch === 'H' ? 'hatch' : ch === 'J' ? 'task' : 'locker', x, y, axis: 'x', state: 'closed', prog: 0, face: LOCK_DIR[ch],
@@ -622,7 +647,7 @@ function loadMap() {
   if (f === 0) for (const o of (Array.isArray(m.objs) ? m.objs : [])) {
     const T = OBJ_TYPES[o.t]; if (!T) continue;
     const ang = (o.a || 0) * Math.PI / 4;
-    const ob = { t: o.t, x: o.x + 1, y: o.y + 1, a: o.a || 0, c: Math.cos(ang), s: Math.sin(ang), hl: T.hl, hw: T.hw, rad: Math.hypot(T.hl, T.hw) };
+    const ob = { t: o.t, x: o.x + 1 + mapPad, y: o.y + 1 + mapPad, a: o.a || 0, c: Math.cos(ang), s: Math.sin(ang), hl: T.hl, hw: T.hw, rad: Math.hypot(T.hl, T.hw) };
     OBJS.push(ob);
     for (let cy = Math.max(1, Math.floor(ob.y - ob.rad - 1)); cy <= Math.min(H - 2, Math.ceil(ob.y + ob.rad + 1)); cy++)
       for (let cx = Math.max(1, Math.floor(ob.x - ob.rad - 1)); cx <= Math.min(W - 2, Math.ceil(ob.x + ob.rad + 1)); cx++)
@@ -632,6 +657,7 @@ function loadMap() {
   }
   useFloor(0);
   hasExitLine = FL.some(F => F.EXITL.some(v => v));
+  computeView();
   // distBuf must be 64-bit: 32-bit rounding made the search skip cells. One entry per tile per floor.
   distBuf = new Float64Array(W * H * FL.length); prevBuf = new Int32Array(W * H * FL.length);
 
@@ -704,7 +730,17 @@ const hatchOpen = () => stats.chase >= CFG.hatchAfter;
 let endStart = -1;
 // The exit gate zone: three gate tiles and a switch, which appears on the outer wall once every task box is done.
 // autoGate is its switch (null until it appears); gateTried stops it looking again if the wall had no room.
-let autoGate = null, gateTried = false;
+let autoGate = null, gateTried = false, mapPad = 0;
+// The part of the grid that is actually shown: everything that is not empty space. VB = [left, top, right, bottom].
+let VB = [0, 0, 1, 1];
+function computeView() {
+  if (mode === 'edit' || !FL[0]) { VB = [0, 0, W, H]; return; }
+  let x0 = W, y0 = H, x1 = 0, y1 = 0; const V = FL[0].VOID, V2 = FL[1] && FL[1].VOID;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!V[y * W + x] || (V2 && !V2[y * W + x] && !FL[1].AIR[y * W + x])) {
+    if (x < x0) x0 = x; if (x + 1 > x1) x1 = x + 1; if (y < y0) y0 = y; if (y + 1 > y1) y1 = y + 1;
+  }
+  VB = x1 > x0 ? [x0, y0, x1, y1] : [0, 0, W, H];
+}
 function openGate(s) { s.state = 'open'; if (s.gates) for (const g of s.gates) g.state = 'open'; }
 function spawnExitGate() {
   gateTried = true;
@@ -739,6 +775,28 @@ function spawnExitGate() {
     F.G[i] = 0; F.SIGHT[i] = 1; F.spec[i] = g; F.specials.push(g); sw.gates.push(g);
   }
   F.spec[sw.y * W + sw.x] = sw; F.specials.push(sw);            // the switch sits in the wall, which stays solid
+  // The exit zone: a short passage out through the wall behind each gate tile, walled in, with the exit line at its far end.
+  const zone = new Set(), lineCells = [];
+  for (let k = 0; k < 4; k++) {
+    if (k === swAt) continue;
+    const [gx, gy] = cellOf(k), [ix, iy] = cand.get(run[k]);
+    for (let d = 1; d <= 3; d++) {
+      const zx = gx - ix * d, zy = gy - iy * d, zi = zy * W + zx;
+      if (!inGrid(zx, zy) || zx < 1 || zy < 1 || zx > W - 2 || zy > H - 2 || !(F.VOID[zi] || zone.has(zi))) break;
+      zone.add(zi); if (d === 3) lineCells.push(zi);
+    }
+  }
+  if (lineCells.length) {
+    for (const zi of zone) { F.G[zi] = 0; F.VOID[zi] = 0; F.SIGHT[zi] = 0; }
+    for (const zi of zone) for (const [dx2, dy2] of NEAR) {
+      const j = zi + dy2 * W + dx2;
+      if (F.VOID[j] && !zone.has(j)) { F.G[j] = 1; F.VOID[j] = 0; F.SIGHT[j] = 1; }   // wall it in
+    }
+    for (const li of lineCells) F.EXITL[li] = 1;
+    hasExitLine = true;
+    for (const g of sw.gates) g.auto = false;                // with a zone behind it, the gate is a doorway and the line is the exit
+    computeView(); resize();
+  }
   autoGate = sw;
   say('All tasks done — an exit gate has appeared on the outer wall!');
   if (snd.ctx && snd.on) sndSting(snd.ctx.currentTime);
@@ -1189,7 +1247,7 @@ function updateRunner(dt) {
     }
     if (a.kind === 'gate' && actionHeld()) {
       // opening a gate roots you to the spot; progress is kept if you let go
-      r.gateT = now; a.s.prog += dt; r.vx = r.vy = 0; r.running = false; r.headT = 0;
+      r.gateT = now; a.s.prog += dt; r.gateP = a.s.prog / CFG.gateTime; r.vx = r.vy = 0; r.running = false; r.headT = 0;
       r.face = Math.atan2(a.s.y + .5 - r.y, a.s.x + .5 - r.x);
       if (a.s.prog >= CFG.gateTime) { openGate(a.s); startEndgame(false); }
       return;
@@ -1258,12 +1316,22 @@ function pickSearch(c, local) {
   // a wider patrol sometimes goes to the other floor, if the drill has one
   const f = !local && FL.length > 1 && Math.random() < 0.4 ? 1 - c.floor : c.floor, back = curFloor;
   useFloor(f);
-  for (let i = 0; i < 30; i++) {
+  // With every task done and no gate found yet, it looks along the edge of the map, where a gate would be.
+  const hunt = !local && endStart < 0 && tasksAllDone() && allSpecials().some(s => s.type === 'task') && !allSpecials().some(s => (s.type === 'gate' || s.type === 'switch') && s.found && s.state !== 'open');
+  const nearEdge = (x, y) => {
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let k = 1; k <= 4; k++) {
+      const tx = x + dx * k, ty = y + dy * k;
+      if (tx < 1 || ty < 1 || tx >= W - 1 || ty >= H - 1 || VOID[ty * W + tx]) return true;
+    }
+    return false;
+  };
+  for (let i = 0; i < 60; i++) {
     const sx = local ? c.x + (Math.random() - .5) * 14 : 1 + Math.random() * (W - 2);
     const sy = local ? c.y + (Math.random() - .5) * 14 : 1 + Math.random() * (H - 2);
     if (sx < 1 || sy < 1 || sx >= W - 1 || sy >= H - 1) continue;
     if (isSolid(Math.floor(sx), Math.floor(sy)) || AIR[Math.floor(sy) * W + Math.floor(sx)] || PBLOCK[Math.floor(sy) * W + Math.floor(sx)] || PROP[Math.floor(sy) * W + Math.floor(sx)] === 'G') continue;   // it does not pick a bush as somewhere to look
     if (!local && f === c.floor && Math.hypot(sx - c.x, sy - c.y) < 8 && i < 20) continue;
+    if (hunt && i < 50 && !nearEdge(Math.floor(sx), Math.floor(sy))) continue;
     c.kx = sx; c.ky = sy; c.kf = f; c.kvia = -1; c.repath = 0; c.poke = false; break;
   }
   useFloor(back);
@@ -1330,21 +1398,30 @@ function updateChaser(dt) {
     }
     if (pt) { c.taskTarget = T; c.taskPt = pt; c.kx = pt[0]; c.ky = pt[1]; c.kf = c.floor; c.kvia = -1; c.repath = 0; }
   }
-  // Once every task box is done, the chaser can open a gate itself, which starts the collapse timer.
+  // The chaser has to find a gate before it can use it: it remembers a gate or switch once it has had a clear view of it.
+  for (const s of specials) {
+    if (s.found || !(s.type === 'gate' || s.type === 'switch') || Math.hypot(c.x - s.x - .5, c.y - s.y - .5) > 14) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const px = s.x + dx, py = s.y + dy;
+      if (px < 1 || py < 1 || px >= W - 1 || py >= H - 1 || isSolid(px, py) || VOID[py * W + px]) continue;
+      if (los(c.x, c.y, px + .5, py + .5)) { s.found = true; if (s.gates) for (const g of s.gates) g.found = true; break; }
+    }
+  }
+  // Once every task box is done, the chaser can open a gate it has found, which starts the collapse timer.
   if (c.gateTarget) {
     const Gt = c.gateTarget, dl = Math.hypot(c.x - Gt.x - .5, c.y - Gt.y - .5);
     if (lead || Gt.state === 'open' || endStart >= 0 || Math.hypot(c.kx - c.gatePt[0], c.ky - c.gatePt[1]) > 0.1) { c.gateTarget = null; c.gateRetryT = now + 8; }
     else if (dl < 1.6 && c.state === 'chase') { c.state = 'opengate'; c.t = CFG.chaserGateTime; c.face = Math.atan2(Gt.y + .5 - c.y, Gt.x + .5 - c.x); }
   } else if (!lead && !c.inChase && !c.lockerTarget && !c.taskTarget && c.state === 'chase' && endStart < 0 && now > (c.gateRetryT || 0) && tasksAllDone()) {
     let Gt = null, bd = 1e9;
-    for (const s of specials) { if (!((s.type === 'gate' && !s.group) || s.type === 'switch') || s.state === 'open') continue; const d = Math.hypot(c.x - s.x - .5, c.y - s.y - .5); if (d < bd) { bd = d; Gt = s; } }
+    for (const s of specials) { if (!((s.type === 'gate' && !s.group) || s.type === 'switch') || s.state === 'open' || !s.found) continue; const d = Math.hypot(c.x - s.x - .5, c.y - s.y - .5); if (d < bd) { bd = d; Gt = s; } }
     let pt = null;
     if (Gt) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const px = Gt.x + dx, py = Gt.y + dy;
       if (!isSolid(px, py) && !PBLOCK[py * W + px] && (!pt || Math.hypot(px + .5 - c.x, py + .5 - c.y) < Math.hypot(pt[0] - c.x, pt[1] - c.y))) pt = [px + .5, py + .5];
     }
     if (pt) { c.gateTarget = Gt; c.gatePt = pt; c.kx = pt[0]; c.ky = pt[1]; c.kf = c.floor; c.kvia = -1; c.repath = 0; c.poke = false; }
-    else c.gateRetryT = now + 8;
+    else if (Gt) c.gateRetryT = now + 8;
   }
   if (c.state === 'opengate') {
     if (c.saw) { c.state = 'chase'; c.gateTarget = null; c.gateRetryT = now + 3; }      // drops it to come after you
@@ -1696,7 +1773,7 @@ function setTool(t) {
   else if (edFloor) { settleFloors(); saveCustom(); }   // the outline is drawn on the ground floor
   tool = t; outCells = [];
   if (t !== 'stamp') { $('edStamp').value = ''; stampRows = null; }
-  if (!'EHJLUIMYZSDATKXBG?'.includes(t)) $('edItem').value = '';
+  if (!'EHJLUIMYZSDATKXBG6?'.includes(t)) $('edItem').value = '';
   if (!t.startsWith('g:')) $('edGround').value = '';
   $('edGroundFill').classList.toggle('hide', !t.startsWith('g:'));
   for (const x of document.querySelectorAll('#tools button')) x.classList.toggle('on', x.dataset.t === t);
@@ -1957,8 +2034,132 @@ function loadCustom() {
                           rail: Array.isArray(m.up.rail) && m.up.rail.every(r => typeof r === 'string') ? m.up.rail : [] } : undefined });
   } catch (e) {}
 }
-function newDrill(copy) {
-  const src = MAPS[mapIdx], n = MAPS.filter(m => m.custom).length + 1;
+// Random map: a box of a random size with a mix of the built-in and saved structures turned and mirrored at random, then
+// task boxes, lockers, a hatch, hooks and scenery scattered in the gaps. It is saved as a custom drill, so it can be edited.
+function randomDrill() {
+  const rnd = n => Math.floor(Math.random() * n), pick = a => a[rnd(a.length)];
+  const rot = rows => { const h = rows.length, w = rows[0].length, o = []; for (let x = 0; x < w; x++) { let s = ''; for (let y = h - 1; y >= 0; y--) s += ROT_CH[rows[y][x]] || rows[y][x]; o.push(s); } return o; };
+  const flip = rows => rows.map(r => r.split('').reverse().map(c => MIR_CH[c] || c).join(''));
+  // every structure in the stamp list: the built-in ones (as you last saved them) and your own
+  const pool = allStamps().filter(s => s.rows.length && s.rows.length <= 30 && s.rows.every(r => r.length <= 40) && s.rows.some(r => /[^.]/.test(r)));
+  const mine = pool.filter(s => userStamps.includes(s)).sort(() => Math.random() - .5).slice(0, 5);
+  const big = pool.find(s => s.name === 'Large main building');
+  let best = null;
+  for (let attempt = 0; attempt < 30 && !best; attempt++) {
+    const w = 40 + rnd(27), h = 26 + rnd(17);
+    const g = []; for (let y = 0; y < h; y++) g.push(new Array(w).fill('.'));
+    const used = new Uint8Array(w * h);                      // tiles kept clear: structures, items, and the space round them
+    const reserve = (x0, y0, x1, y1) => { for (let y = Math.max(0, y0); y <= Math.min(h - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(w - 1, x1); x++) used[y * w + x] = 1; };
+    const clear = (x0, y0, x1, y1) => { if (x0 < 0 || y0 < 0 || x1 >= w || y1 >= h) return false; for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (used[y * w + x]) return false; return true; };
+    const rects = [];
+    // structures keep a gap of four tiles between each other, so there is always room to run between them
+    const wide = new Uint8Array(w * h);
+    const placeWide = st => {
+      const before = rects.length; const ok = placeW(st); return ok && rects.length > before;
+    };
+    const placeW = st => {
+      let rows = st.rows.map(r => r.padEnd(Math.max(...st.rows.map(q => q.length)), '.'));
+      for (let k = rnd(4); k > 0; k--) rows = rot(rows);
+      if (rnd(2)) rows = flip(rows);
+      const sw = rows[0].length, sh = rows.length;
+      for (let t = 0; t < 40; t++) {
+        const x = 3 + rnd(Math.max(1, w - sw - 5)), y = 3 + rnd(Math.max(1, h - sh - 5));
+        if (x + sw > w - 3 || y + sh > h - 3) continue;
+        let hit = false;
+        for (let j = y; j < y + sh && !hit; j++) for (let i = x; i < x + sw; i++) if (wide[j * w + i]) { hit = true; break; }
+        if (hit) continue;
+        for (let j = 0; j < sh; j++) for (let i = 0; i < sw; i++) if (rows[j][i] !== '.') g[y + j][x + i] = rows[j][i];
+        reserve(x - 1, y - 1, x + sw, y + sh); rects.push([x, y, sw, sh]);
+        for (let j = Math.max(0, y - 4); j <= Math.min(h - 1, y + sh + 3); j++) for (let i = Math.max(0, x - 4); i <= Math.min(w - 1, x + sw + 3); i++) wide[j * w + i] = 1;
+        return true;
+      }
+      return false;
+    };
+    for (const s of mine) placeWide(s);                     // your own structures go in first, so they always get a place if they fit
+    if (big && !mine.includes(big) && rnd(10) < 6) placeWide(big);
+    const want = Math.round(w * h / 150) + rnd(3);
+    for (let k = 0; k < want; k++) placeWide(pick(pool.filter(s => s !== big)));
+    if (rects.length < 3) continue;
+
+    // lockers against the outside of a wall, doors facing away from it
+    const lockCh = { '0,1': 'L', '-1,0': '3', '0,-1': '4', '1,0': '5' };
+    let lockers = 2 + rnd(4);
+    for (let t = 0; t < 400 && lockers > 0; t++) {
+      const x = 2 + rnd(w - 4), y = 2 + rnd(h - 4); if (g[y][x] !== '.') continue;
+      const [dx, dy] = pick([[0, 1], [-1, 0], [0, -1], [1, 0]]);
+      if (g[y - dy][x - dx] !== '#' || g[y + dy][x + dx] !== '.' || g[y + dy * 2] === undefined || g[y + dy * 2][x + dx * 2] !== '.') continue;
+      if (g[y - dx][x - dy] !== '.' && g[y - dx][x - dy] !== '#') continue;
+      if (g[y + dx][x + dy] !== '.' && g[y + dx][x + dy] !== '#') continue;
+      let near = false; for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) { const c = (g[y + j] || [])[x + i]; if (c && 'L345WP'.includes(c)) near = true; }
+      if (near) continue;
+      g[y][x] = lockCh[dx + ',' + dy]; reserve(x - 1, y - 1, x + 1, y + 1); lockers--;
+    }
+    // single items in the open, each with clear ground all round so nothing can wall a path off
+    const scatter = (ch, n, apart) => {
+      const got = [];
+      for (let t = 0; t < n * 60 && got.length < n; t++) {
+        const x = 2 + rnd(w - 4), y = 2 + rnd(h - 4);
+        if (!clear(x - 1, y - 1, x + 1, y + 1)) continue;
+        if (apart && got.some(p => Math.hypot(p[0] - x, p[1] - y) < apart)) continue;
+        g[y][x] = ch; reserve(x - 1, y - 1, x + 1, y + 1); got.push([x, y]);
+      }
+      return got;
+    };
+    const area = w * h;
+    scatter('J', 3 + rnd(3), Math.min(w, h) * 0.45);
+    scatter('H', 1);
+    scatter('6', 3 + rnd(4), 9);
+    // one or two rock hills
+    for (let k = rnd(3); k > 0; k--) for (let t = 0; t < 40; t++) {
+      const rw = 2 + rnd(3), rh = 2 + rnd(2), x = 3 + rnd(w - rw - 6), y = 3 + rnd(h - rh - 6);
+      if (!clear(x - 2, y - 2, x + rw + 1, y + rh + 1)) continue;
+      for (let j = 0; j < rh; j++) for (let i = 0; i < rw; i++) g[y + j][x + i] = 'K';
+      reserve(x - 2, y - 2, x + rw + 1, y + rh + 1); break;
+    }
+    scatter('T', Math.round(area / 110) + rnd(5));
+    scatter('G', Math.round(area / 260) + rnd(4));
+    scatter('K', rnd(5)); scatter('X', 2 + rnd(5)); scatter('B', 1 + rnd(3), 10);
+
+    // start points far apart, then make sure everything that matters can be reached
+    const free = []; for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) if (!used[y * w + x]) free.push([x, y]);
+    if (free.length < 20) continue;
+    const R = pick(free.filter(p => p[0] < w * 0.3).concat(free.slice(0, 1)));
+    let C = null, cd = -1; for (let t = 0; t < 60; t++) { const p = pick(free), d = Math.hypot(p[0] - R[0], p[1] - R[1]); if (d > cd) { cd = d; C = p; } }
+    if (cd < 14) continue;
+    g[R[1]][R[0]] = 'R'; g[C[1]][C[0]] = 'C';
+    const seen = new Uint8Array(w * h), st = [R[1] * w + R[0]]; seen[st[0]] = 1;
+    while (st.length) {
+      const i = st.pop(), x = i % w, y = (i / w) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, j = ny * w + nx;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h || seen[j] || !'.GRCPW12AD'.includes(g[ny][nx])) continue;
+        seen[j] = 1; st.push(j);
+      }
+    }
+    const reach = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => x + dx >= 0 && y + dy >= 0 && x + dx < w && y + dy < h && seen[(y + dy) * w + x + dx]);
+    let ok = seen[C[1] * w + C[0]] === 1, open = 0, got = 0;
+    for (let y = 0; y < h && ok; y++) for (let x = 0; x < w; x++) {
+      if ('JH'.includes(g[y][x]) || 'L345'.includes(g[y][x])) { if (!reach(x, y)) { ok = false; break; } }
+      if (g[y][x] === '.') { open++; if (seen[y * w + x]) got++; }
+    }
+    if (!ok || got < open * 0.97) continue;
+
+    // ground: one kind all over, with a few patches of something else
+    const base = pick(['g', 'g', 'd', 'm', 's', 'a']), gr = []; for (let y = 0; y < h; y++) gr.push(new Array(w).fill(base));
+    for (let k = 2 + rnd(5); k > 0; k--) {
+      const kind = pick(['c', 'l', 'l', 'w', 'd', 'g', 'm'].filter(q => q !== base)), cx = rnd(w), cy = rnd(h), rx = 3 + rnd(6), ry = 2 + rnd(5);
+      for (let y = Math.max(0, cy - ry); y <= Math.min(h - 1, cy + ry); y++) for (let x = Math.max(0, cx - rx); x <= Math.min(w - 1, cx + rx); x++)
+        if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1 + (Math.random() - .5) * .35) gr[y][x] = kind;
+    }
+    for (const [x, y, sw, sh] of rects) if (sw >= 8 && sh >= 5) for (let j = y; j < y + sh; j++) for (let i = x; i < x + sw; i++) gr[j][i] = 'f';   // boards inside the bigger buildings
+    best = { rows: g.map(r => r.join('')), ground: gr.map(r => r.join('')) };
+  }
+  if (!best) { say('Could not build a random map this time — try again'); return; }
+  const n = MAPS.filter(m => m.custom && /^Random map/.test(m.name)).length + 1;
+  MAPS.push({ id: 'c' + Date.now().toString(36), name: 'Random map ' + n, desc: 'Random map', rows: best.rows, custom: true, ground: best.ground });
+  mapIdx = MAPS.length - 1; delArmed = false; store('lt_map', mapIdx); saveCustom(); buildDrills(); showMenu();
+}
+function newDrill(copy) {  const src = MAPS[mapIdx], n = MAPS.filter(m => m.custom).length + 1;
   let rows;
   if (copy) { const w = Math.max(...src.rows.map(r => r.length)); rows = src.rows.map(r => r.padEnd(w, '.')); }
   else {
@@ -2191,7 +2392,7 @@ function canRelocate(cells, out) {
   for (const [x, y] of out) {
     if (y < 0 || y >= m.rows.length || x < 0 || x >= m.rows[0].length) return 'edge';
     if (m.rows[y][x] === '~' && !edFloor) return 'edge';
-    if (!own.has(y * 1000 + x) && /[#OWPRCTKXBGEHJLSDAFNQV12Z345UIMY]/.test(m.rows[y][x])) return 'overlap';
+    if (!own.has(y * 1000 + x) && /[#OWPRCTKXBGEHJLSDAFNQV12Z3456UIMY]/.test(m.rows[y][x])) return 'overlap';
   }
   return '';
 }
@@ -2348,11 +2549,11 @@ function importData(text) {
   showMenu();   // leave the editor or a run before changing the drill list
   let nd = 0, ns = 0;
   for (const m of Array.isArray(d.drills) ? d.drills : []) {
-    const rows = m && clean(m.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12Z345UIMY]/g); if (!rows) continue;
+    const rows = m && clean(m.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12Z3456UIMY]/g); if (!rows) continue;
     const id = String(m.id || 'c' + Date.now().toString(36) + nd), name = String(m.name || 'My drill').slice(0, 30);
     const cur = MAPS.find(x => x.custom && x.id === id);
     const ground = clean(m.ground, /[^.mdsgcawpfl]/g) || undefined;
-    const upRows = m.up && clean(m.up.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12Z345UIMY]/g);
+    const upRows = m.up && clean(m.up.rows, /[^#OWPRC.~TKXBGEHJLSDAFNQV12Z3456UIMY]/g);
     const up = upRows ? { rows: upRows, ground: clean(m.up.ground, /[^.mdsgcawpfl]/g) || [], rail: clean(m.up.rail, /[^0-9a-f]/g) || [] } : undefined;
     const rail = clean(m.rail, /[^0-9a-f]/g) || undefined, objs = cleanObjs(m.objs);
     if (cur) { cur.name = name; cur.rows = rows; cur.ground = ground; cur.rail = rail; cur.objs = objs; cur.up = up; cur.swapped = false; }
@@ -2360,7 +2561,7 @@ function importData(text) {
     nd++;
   }
   for (const s of Array.isArray(d.stamps) ? d.stamps : []) {
-    const rows = s && typeof s.name === 'string' && clean(s.rows, /[^#WP.TKXBGEHJLSDAFNQV12Z345]/g); if (!rows) continue;
+    const rows = s && typeof s.name === 'string' && clean(s.rows, /[^#WP.TKXBGEHJLSDAFNQV12Z3456]/g); if (!rows) continue;
     const name = s.name.slice(0, 30), i = userStamps.findIndex(u => sameName(u.name, name));
     if (i >= 0) userStamps[i] = { name, rows }; else userStamps.push({ name, rows });
     ns++;
@@ -2402,7 +2603,7 @@ function showMenu() {
   updateHud();
 }
 function startRun() {
-  leaveWorkspace(); settleFloors(); loadMap(); setBars(false); buildDrills(); mode = 'play';
+  leaveWorkspace(); settleFloors(); mode = 'play'; loadMap(); setBars(false); buildDrills();
   $('overlay').classList.add('hide');
   say($('optNoChaser').checked ? 'Exploring: the chaser is switched off' : 'The chaser is hunting for you');
 }
@@ -2432,7 +2633,10 @@ function resize() {
   const rect = $('wrap').getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
   vw = rect.width; vh = rect.height;
   cv.width = Math.max(1, Math.round(vw * dpr)); cv.height = Math.max(1, Math.round(vh * dpr));
-  if (W) { S = Math.min(vw / W, vh / H); ox = (vw - W * S) / 2; oy = (vh - H * S) / 2; }
+  if (W) {   // fit the visible part of the map to the space
+    const bw = VB[2] - VB[0], bh = VB[3] - VB[1];
+    S = Math.min(vw / bw, vh / bh); ox = (vw - bw * S) / 2 - VB[0] * S; oy = (vh - bh * S) / 2 - VB[1] * S;
+  }
 }
 // Ground. Each type is a base colour plus a little texture that varies from tile to tile.
 function drawGround(g, x, y) {
@@ -2473,25 +2677,57 @@ function drawGround(g, x, y) {
 }
 // The collapse: glowing cracks spreading over every bit of open ground, brighter as time runs down.
 // Each tile has a slightly off-centre point; lines join it to some of its neighbours, which gives a jagged web.
-function drawCracks() {
-  const k = Math.min(1, (now - endStart) / CFG.endTime), pulse = 0.72 + 0.28 * Math.sin(performance.now() / 240);
+// The web is drawn once into an off-screen picture at screen resolution and that is faded in each frame,
+// because stroking thousands of see-through lines every frame is very slow.
+const crackCache = new WeakMap();
+function crackLayers(px) {
+  let sig = W * 31 + H + px * 977;
+  for (let i = 0; i < W * H; i++) if (G[i] === 1 || VOID[i] || HILL[i] || TRI[i]) sig = (sig + (i + 1) * 7) | 0;
+  let c = crackCache.get(G);
+  if (c && c.sig === sig) return c;
+  // one picture pixel per screen pixel where the map is small enough, so it is copied across without stretching
+  const q = Math.max(4, Math.min(px, Math.floor(Math.sqrt(5e6 / (W * H)))));
   // a well-mixed number per tile, so the web doesn't repeat in a visible pattern
   const mix = (x, y) => { let n = Math.imul(x, 374761393) + Math.imul(y, 668265263); n = Math.imul(n ^ (n >>> 13), 1274126177); return (n ^ (n >>> 16)) >>> 0; };
   const pt = (x, y) => { const h = mix(x, y); return [x + .5 + ((h % 7) - 3) * .11, y + .5 + (((h >>> 5) % 7) - 3) * .11]; };
   const open = (x, y) => { const i = y * W + x; return x > 0 && y > 0 && x < W - 1 && y < H - 1 && G[i] !== 1 && !VOID[i] && !HILL[i] && !TRI[i]; };
-  ctx.beginPath();
-  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-    if (!open(x, y)) continue;
-    const h = (mix(x + 91, y + 17) >>> 8) % 12, a = pt(x, y);
-    if (h % 3 !== 0 && open(x + 1, y)) { const b = pt(x + 1, y); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
-    if (h % 4 !== 1 && open(x, y + 1)) { const b = pt(x, y + 1); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
-    if (h === 5 && open(x + 1, y + 1)) { const b = pt(x + 1, y + 1); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
-    if (h % 5 === 2) { ctx.moveTo(a[0], a[1]); ctx.lineTo(a[0] + ((h % 3) - 1) * .3, a[1] + .32); }   // a short spur
+  const cv = document.createElement('canvas'); cv.width = Math.ceil(W * q); cv.height = Math.ceil(H * q);
+  const g = cv.getContext('2d'); g.scale(q, q);
+  {
+    g.beginPath();
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      if (!open(x, y)) continue;
+      const h = (mix(x + 91, y + 17) >>> 8) % 12, a = pt(x, y);
+      if (h % 3 !== 0 && open(x + 1, y)) { const b = pt(x + 1, y); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+      if (h % 4 !== 1 && open(x, y + 1)) { const b = pt(x, y + 1); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+      if (h === 5 && open(x + 1, y + 1)) { const b = pt(x + 1, y + 1); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+      // a short spur
+      if (h % 5 === 2) { g.moveTo(a[0], a[1]); g.lineTo(a[0] + ((h % 3) - 1) * .3, a[1] + .32); }
+    }
+    g.lineCap = 'round';
+    g.globalAlpha = .45; g.strokeStyle = 'rgb(255,80,15)'; g.lineWidth = .26; g.stroke();
+    g.globalAlpha = 1; g.strokeStyle = 'rgb(255,175,70)'; g.lineWidth = .07; g.stroke();
   }
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(255,80,15,' + ((0.16 + 0.24 * k) * pulse).toFixed(3) + ')'; ctx.lineWidth = .26; ctx.stroke();   // the glow
-  ctx.strokeStyle = 'rgba(255,175,70,' + ((0.5 + 0.45 * k) * pulse).toFixed(3) + ')'; ctx.lineWidth = .06; ctx.stroke();   // the hot core
-  ctx.lineCap = 'butt';
+  c = { sig, q, cv };
+  crackCache.set(G, c);
+  return c;
+}
+function drawCracks() {
+  const k = Math.min(1, (now - endStart) / CFG.endTime), pulse = 0.72 + 0.28 * Math.sin(performance.now() / 240);
+  const m = ctx.getTransform(), c = crackLayers(Math.max(4, Math.round(m.a * 100) / 100)), ga = ctx.globalAlpha;
+  // only the part of the map that is on screen
+  const x0 = Math.max(0, Math.floor(-m.e / m.a)), y0 = Math.max(0, Math.floor(-m.f / m.d));
+  const x1 = Math.min(W, Math.ceil((ctx.canvas.width - m.e) / m.a)), y1 = Math.min(H, Math.ceil((ctx.canvas.height - m.f) / m.d));
+  if (x1 <= x0 || y1 <= y0) return;
+  ctx.globalAlpha = ga * Math.min(1, (0.6 + 0.4 * k) * pulse);
+  if (Math.abs(m.a - c.q) < 0.01 && Math.abs(m.d - c.q) < 0.01) {
+    // same scale as the screen: copy pixel for pixel
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
+    const sx = Math.round(x0 * c.q), sy = Math.round(y0 * c.q), sw = Math.min(c.cv.width - sx, Math.round((x1 - x0) * c.q)), sh = Math.min(c.cv.height - sy, Math.round((y1 - y0) * c.q));
+    ctx.drawImage(c.cv, sx, sy, sw, sh, Math.round(m.e) + sx, Math.round(m.f) + sy, sw, sh);
+    ctx.restore();
+  } else ctx.drawImage(c.cv, x0 * c.q, y0 * c.q, (x1 - x0) * c.q, (y1 - y0) * c.q, x0, y0, x1 - x0, y1 - y0);
+  ctx.globalAlpha = ga;
 }
 // Time has run out: a huge claw comes down out of the sky, closes on the runner and carries them up off the map.
 function drawClaw(r) {
@@ -2675,19 +2911,77 @@ function drawRail(x, y, mask) {
     }
   });
 }
+// A tree's canopy: a ragged, lumpy crown about two tiles across (four tiles of cover) over a one-tile trunk.
+// Each tree gets its own outline, its own clumps of leaves and one of several colourings, all fixed by where it stands.
+// Only the trunk is solid. The crown fades when someone is under it so they are never lost from view.
+const TREE_COLS = [
+  ['#1b3a26', '#2a5636', '#3d7449'],   // deep green
+  ['#27401f', '#41602a', '#638338'],   // olive
+  ['#17383a', '#22565a', '#35797a'],   // blue-green
+  ['#35451c', '#58702a', '#86a03c'],   // yellow-green
+  ['#14301f', '#1e4a2e', '#2c6340'],   // dark pine
+  ['#4a2f17', '#7a4a1e', '#b0702a'],   // autumn brown
+  ['#4d2318', '#873b20', '#c0602c'],   // autumn red
+];
+function drawTree(x, y, alpha) {
+  const cx = x + .5, cy = y + .5;
+  let seed = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0;
+  const rnd = () => { seed = Math.imul(seed ^ (seed >>> 13), 1274126177) + 12345 | 0; return ((seed ^ (seed >>> 16)) >>> 0) / 4294967296; };
+  const cols = TREE_COLS[Math.floor(rnd() * TREE_COLS.length)];
+  // a lumpy outline: points round a circle, each pushed in or out, joined with straight edges so it looks ragged
+  const blob = (bx, by, rad, pts, rough) => {
+    const a0 = rnd() * 6.283;
+    ctx.beginPath();
+    for (let i = 0; i < pts; i++) {
+      const a = a0 + i / pts * 6.283, rr = rad * (1 - rough + rnd() * rough * 2) * (i % 2 ? 0.86 : 1);
+      if (i) ctx.lineTo(bx + Math.cos(a) * rr, by + Math.sin(a) * rr); else ctx.moveTo(bx + Math.cos(a) * rr, by + Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+  };
+  const ga = ctx.globalAlpha; ctx.globalAlpha = ga * alpha;
+  const sx = 0.85 + rnd() * 0.3, sy = 0.85 + rnd() * 0.3;      // some crowns are wider, some taller
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(sx, sy);
+  ctx.fillStyle = cols[0]; blob(0, 0, 1.0, 13 + Math.floor(rnd() * 5), 0.2);
+  ctx.fillStyle = cols[1];
+  for (let k = 3 + Math.floor(rnd() * 3); k > 0; k--) { const a = rnd() * 6.283, d = 0.2 + rnd() * 0.42; blob(Math.cos(a) * d, Math.sin(a) * d, 0.3 + rnd() * 0.22, 7 + Math.floor(rnd() * 3), 0.22); }
+  ctx.fillStyle = cols[2];
+  for (let k = 2 + Math.floor(rnd() * 3); k > 0; k--) { const a = rnd() * 6.283, d = 0.1 + rnd() * 0.5; blob(Math.cos(a) * d - .06, Math.sin(a) * d - .08, 0.13 + rnd() * 0.12, 6, 0.25); }
+  ctx.restore(); ctx.globalAlpha = ga;
+}
+// A hook stands well over head height: a thick post on its own tile, with an iron arm reaching out over the next
+// tile and a big curved hook hanging from the end. Only the post is solid, so you can run under the arm.
+function drawHook(x, y) {
+  const cx = x + .5, cy = y + .5, f = ((x * 7 + y * 13) % 5) / 5 > .5 ? -1 : 1;
+  const ax = cx + 1.05 * f, ay = cy - .55;                       // the end of the arm
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#2a1d12'; ctx.lineWidth = .2; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ax, ay); ctx.stroke();
+  ctx.strokeStyle = '#7b858a'; ctx.lineWidth = .12; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ax, ay); ctx.stroke();
+  ctx.strokeStyle = '#59636a'; ctx.lineWidth = .06; ctx.beginPath(); ctx.moveTo(cx + .1 * f, cy + .3); ctx.lineTo(cx + .6 * f, cy - .31); ctx.stroke();   // brace
+  ctx.fillStyle = '#6b4a2b'; ctx.beginPath(); ctx.arc(cx, cy, .36, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#2a1d12'; ctx.lineWidth = .07; ctx.stroke();
+  ctx.fillStyle = '#86603a'; ctx.beginPath(); ctx.arc(cx - .07, cy - .08, .17, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#9aa4a8'; ctx.lineWidth = .05; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax, ay + .3); ctx.stroke();                              // chain
+  ctx.strokeStyle = '#1c2225'; ctx.lineWidth = .17; ctx.beginPath(); ctx.arc(ax, ay + .62, .32, -Math.PI / 2, Math.PI * (f > 0 ? .8 : .2), f < 0); ctx.stroke();
+  ctx.strokeStyle = '#cfd7da'; ctx.lineWidth = .1; ctx.beginPath(); ctx.arc(ax, ay + .62, .32, -Math.PI / 2, Math.PI * (f > 0 ? .8 : .2), f < 0); ctx.stroke();
+  ctx.lineCap = 'butt';
+}
 // Props. Each is drawn slightly differently per tile so a row of them doesn't look stamped.
 function drawProp(ch, x, y) {
   const v = ((x * 7 + y * 13) % 5) / 5, cx = x + .5, cy = y + .5;
-  if (ch === 'T') {          // tree: canopy seen from above
-    ctx.fillStyle = '#1f3d2a'; ctx.beginPath(); ctx.arc(cx, cy, .5, 0, 7); ctx.fill();
-    ctx.fillStyle = '#2c5638'; ctx.beginPath(); ctx.arc(cx - .1 + v * .2, cy - .08, .33, 0, 7); ctx.fill();
-    ctx.fillStyle = '#3a6e47'; ctx.beginPath(); ctx.arc(cx + .08, cy + .1 - v * .1, .16, 0, 7); ctx.fill();
+  if (ch === 'T') {          // tree: only the trunk and its shadow go down here; the canopy is drawn later, over the people (drawTree)
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(cx + .15, cy + .18, 1.0, .9, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4a3523'; ctx.beginPath(); ctx.arc(cx, cy, .34, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2b1e13'; ctx.lineWidth = .07; ctx.stroke();
+    ctx.fillStyle = '#6a4d33'; ctx.beginPath(); ctx.arc(cx - .07, cy - .07, .15, 0, 7); ctx.fill();
   } else if (ch === 'K') {   // rock
     ctx.fillStyle = '#5b6468'; ctx.beginPath();
     ctx.moveTo(x + .12, y + .55 + v * .1); ctx.lineTo(x + .3, y + .15); ctx.lineTo(x + .7 - v * .1, y + .1);
     ctx.lineTo(x + .92, y + .45); ctx.lineTo(x + .78, y + .88); ctx.lineTo(x + .3, y + .9); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#7a858a'; ctx.beginPath();
     ctx.moveTo(x + .34, y + .25); ctx.lineTo(x + .62, y + .2); ctx.lineTo(x + .7, y + .45); ctx.lineTo(x + .4, y + .5); ctx.closePath(); ctx.fill();
+  } else if (ch === '6') {   // hook: only its feet and shadow go down here; the tall post and arm are drawn later, over the people (drawHook)
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(cx + .12, cy + .14, .62, .44, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3d2c1c'; ctx.fillRect(cx - .62, cy - .11, 1.24, .22); ctx.fillRect(cx - .11, cy - .62, .22, 1.24);
   } else if (ch === 'X') {   // crate
     ctx.fillStyle = '#7a5a34'; ctx.fillRect(x + .08, y + .08, .84, .84);
     ctx.strokeStyle = '#4e3a22'; ctx.lineWidth = .07; ctx.strokeRect(x + .08, y + .08, .84, .84);
@@ -2757,9 +3051,9 @@ function draw() {
   const fitS = S, fitOx = ox, fitOy = oy;
   if ((mode === 'play' || mode === 'over') && S < MIN_TILE) {
     S = MIN_TILE;
-    const follow = (pos, size, view) => size * S <= view ? (view - size * S) / 2
-      : Math.max(view - size * S, Math.min(0, view / 2 - pos * S));
-    ox = follow(runner.x, W, vw); oy = follow(runner.y, H, vh);
+    const follow = (pos, lo, hi, view) => (hi - lo) * S <= view ? (view - (hi - lo) * S) / 2 - lo * S
+      : Math.max(view - hi * S, Math.min(-lo * S, view / 2 - pos * S));
+    ox = follow(runner.x, VB[0], VB[2], vw); oy = follow(runner.y, VB[1], VB[3], vh);
   }
   ctx.save(); ctx.translate(ox, oy); ctx.scale(S, S);
 
@@ -2988,6 +3282,12 @@ function draw() {
   // bushes and corn go on top so anyone inside looks hidden
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     if (PROP[y * W + x] === 'G') drawProp('G', x, y);
+    if (PROP[y * W + x] === '6') drawHook(x, y);
+    if (PROP[y * W + x] === 'T') {
+      // see-through while you or the chaser are under the crown
+      const under = mode !== 'edit' && ((r.floor === vf && Math.hypot(r.x - x - .5, r.y - y - .5) < 1.45) || (!noChaser && c.floor === vf && Math.hypot(c.x - x - .5, c.y - y - .5) < 1.45));
+      drawTree(x, y, under ? 0.3 : mode === 'edit' ? 0.85 : 1);
+    }
     if (GROUND[y * W + x] === 'c' && G[y * W + x] !== 1) drawCorn(x, y);
   }
   if (mode === 'edit') {
@@ -3110,7 +3410,7 @@ function buildDrills() {
       '<span class="best">' + (b ? b.toFixed(1) + 's' : '') + '</span><b>' + esc(m.name) +
       (m.custom ? '<span class="tag">custom</span>' : '') + '</b><small>' + m.desc + '</small></button>';
   }).join('');
-  $('drillBtns').innerHTML = '<button data-a="new">+ New drill</button>' + (MAPS[mapIdx].custom
+  $('drillBtns').innerHTML = '<button data-a="new">+ New drill</button><button data-a="random">Random map</button>' + (MAPS[mapIdx].custom
     ? '<button data-a="edit">Edit</button><button data-a="del">' + (delArmed ? 'Really delete?' : 'Delete') + '</button>'
     : '<button data-a="copy">Copy &amp; edit</button>');
   for (const b of document.querySelectorAll('#diff button')) b.classList.toggle('on', b.dataset.d === diffKey);
@@ -3124,6 +3424,7 @@ $('drillBtns').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const a = b.dataset.a;
   if (a === 'new') newDrill(false);
+  else if (a === 'random') randomDrill();
   else if (a === 'copy') newDrill(true);
   else if (a === 'edit') enterEdit();
   else if (a === 'del') {
@@ -3156,6 +3457,7 @@ $('edItem').addEventListener('change', e => {
   edMsg(v === 'E' ? 'Exit gate: click to place, ideally in a gap in a wall. In a run, hold the action button next to it for ' + CFG.gateTime + ' s to open it, then run through to escape.'
       : v === 'J' ? 'Task box: click to place as many as you like. In a run, hold the action button next to one for ' + CFG.taskTime + ' s to finish it. When every box is done, a 3-tile exit gate with a switch appears at a random spot on the outer wall (unless you placed a gate by hand, which then unlocks instead). Finishing a box makes a noise the chaser comes to check.'
       : v === 'L' ? 'Locker: click to place; press R to choose which way the doors face, or click one already there to turn it. In a run, stand in front of the doors and press the action button to hide, and again to get out. If the chaser saw you get in, or your scratch marks lead to it, it will open the door.'
+      : v === '6' ? 'Hook: click or drag to place. Only the post on its own tile is solid: the arm and hook reach over the next tile, and you can run underneath them. You and the chaser can see past it.'
       : v === 'K' ? 'Rock: click or drag to place. Four or more rocks touching merge into a hill you can drop off. Add Rock slope tiles to choose where you walk up; with none, it puts a slope on the left side for you.'
       : v === 'S' ? 'Rock slope: place it on the edge of a group of rocks, where you want the way up. Once a group has any slope tiles, those are its only ways up. You can add several.'
       : v === 'U' ? 'Staircase: click to place one. It climbs up the screen (north) to start with; press R to turn it. You walk on at the bottom end and off at the top end upstairs; the other sides are closed. Then press "Upper floor" to build the floor above.'
@@ -3225,7 +3527,7 @@ $('edW').addEventListener('change', resizeDrill);
 $('edH').addEventListener('change', resizeDrill);
 $('edClear').addEventListener('click', () => {
   if (ws) setTool('#');
-  const m = MAPS[mapIdx]; m.rows = m.rows.map(r => r.replace(/[#WPTKXBGEHJLSDAFNQV12Z345]/g, '.')); saveCustom(); loadMap();
+  const m = MAPS[mapIdx]; m.rows = m.rows.map(r => r.replace(/[#WPTKXBGEHJLSDAFNQV12Z3456]/g, '.')); saveCustom(); loadMap();
 });
 $('edFloor0').addEventListener('click', e => { e.target.blur(); setEdFloor(0); });
 $('edFloor1').addEventListener('click', e => { e.target.blur(); setEdFloor(1); });
@@ -3479,14 +3781,42 @@ function sndInit() {
   const rumbleG = c.createGain(); rumbleG.gain.value = 0.5;
   snd.engOsc.connect(engF); engF.connect(chug); rumble.connect(rumbleF); rumbleF.connect(rumbleG); rumbleG.connect(chug);
   chug.connect(snd.eng); snd.engOsc.start(); snd.engLfo.start(); rumble.start();
-  // Gate siren: a low tone that rises and falls slowly while its loudness pulses, heard while you are opening an exit gate.
+  // Gate klaxon: a harsh two-reed horn that blares in repeated blasts, each one swooping up in pitch as it starts.
+  // Heard for the second half of opening an exit gate.
   snd.siren = c.createGain(); snd.siren.gain.value = 0; snd.siren.connect(snd.master);
-  const sirOsc = c.createOscillator(); sirOsc.type = 'triangle'; sirOsc.frequency.value = 150;
-  const sweep = c.createOscillator(); sweep.frequency.value = 0.45; const sweepAmt = c.createGain(); sweepAmt.gain.value = 28; sweep.connect(sweepAmt); sweepAmt.connect(sirOsc.frequency);
-  const pulse = c.createGain(); pulse.gain.value = 0.6;
-  const pulseLfo = c.createOscillator(); pulseLfo.frequency.value = 1.6; const pulseAmt = c.createGain(); pulseAmt.gain.value = 0.4; pulseLfo.connect(pulseAmt); pulseAmt.connect(pulse.gain);
-  const sirF = c.createBiquadFilter(); sirF.type = 'lowpass'; sirF.frequency.value = 600;
-  sirOsc.connect(sirF); sirF.connect(pulse); pulse.connect(snd.siren); sirOsc.start(); sweep.start(); pulseLfo.start();
+  const klF = c.createBiquadFilter(); klF.type = 'bandpass'; klF.frequency.value = 950; klF.Q.value = 0.9;
+  const klGate = c.createGain(); klGate.gain.value = 0.5;
+  // the on/off rhythm: a square wave with its corners rounded off so the blasts don't click
+  const klLfo = c.createOscillator(); klLfo.type = 'square'; klLfo.frequency.value = 1.15;
+  const klSmooth = c.createBiquadFilter(); klSmooth.type = 'lowpass'; klSmooth.frequency.value = 14;
+  const klAmt = c.createGain(); klAmt.gain.value = 0.5; klLfo.connect(klSmooth); klSmooth.connect(klAmt); klAmt.connect(klGate.gain);
+  for (const f of [296, 301.5, 444]) {
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    const bend = c.createGain(); bend.gain.value = f * 0.09; klSmooth.connect(bend); bend.connect(o.frequency);
+    o.connect(klF); o.start();
+  }
+  klF.connect(klGate); klGate.connect(snd.siren); klLfo.start();
+  // Gate machinery: a ratcheting grind (filtered noise chopped by a saw wave) over a low motor growl. The clangs are added in sndTick.
+  snd.grind = c.createGain(); snd.grind.gain.value = 0; snd.grind.connect(snd.master);
+  const grN = c.createBufferSource(); grN.buffer = soft; grN.loop = true;
+  const grF = c.createBiquadFilter(); grF.type = 'bandpass'; grF.frequency.value = 420; grF.Q.value = 1.4;
+  const grChop = c.createGain(); grChop.gain.value = 0.55;
+  const grLfo = c.createOscillator(); grLfo.type = 'sawtooth'; grLfo.frequency.value = 13; const grAmt = c.createGain(); grAmt.gain.value = 0.45; grLfo.connect(grAmt); grAmt.connect(grChop.gain);
+  const grWob = c.createOscillator(); grWob.frequency.value = 0.7; const grWobAmt = c.createGain(); grWobAmt.gain.value = 140; grWob.connect(grWobAmt); grWobAmt.connect(grF.frequency);
+  const grM = c.createOscillator(); grM.type = 'sawtooth'; grM.frequency.value = 58; const grMF = c.createBiquadFilter(); grMF.type = 'lowpass'; grMF.frequency.value = 260; const grMG = c.createGain(); grMG.gain.value = 0.22;
+  grN.connect(grF); grF.connect(grChop); grChop.connect(snd.grind); grM.connect(grMF); grMF.connect(grMG); grMG.connect(grChop);
+  grN.start(); grLfo.start(); grWob.start(); grM.start();
+  // The collapse: a low, slightly out-of-tune drone that throbs. As the timer runs down it gets louder and brighter,
+  // the throb speeds up, the pitch creeps upward and a thin clashing whine fades in over the top.
+  snd.end = c.createGain(); snd.end.gain.value = 0; snd.end.connect(snd.master);
+  snd.endOscs = [55, 58.4, 82.6].map(f => { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.start(); return o; });
+  snd.endF = c.createBiquadFilter(); snd.endF.type = 'lowpass'; snd.endF.frequency.value = 180; snd.endF.Q.value = 2;
+  const endThrob = c.createGain(); endThrob.gain.value = 0.55;
+  snd.endLfo = c.createOscillator(); snd.endLfo.frequency.value = 1.2; const endAmt = c.createGain(); endAmt.gain.value = 0.45; snd.endLfo.connect(endAmt); endAmt.connect(endThrob.gain); snd.endLfo.start();
+  for (const o of snd.endOscs) o.connect(snd.endF);
+  snd.endF.connect(endThrob); endThrob.connect(snd.end);
+  snd.endHi = c.createGain(); snd.endHi.gain.value = 0; snd.endHi.connect(snd.end);
+  for (const f of [1244.5, 1318.5, 1975.5]) { const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f; o.connect(snd.endHi); o.start(); }
   // chase track: everything goes through one filter that opens up as the chaser closes in
   snd.chase = c.createGain(); snd.chase.gain.value = 0;
   snd.lp = c.createBiquadFilter(); snd.lp.type = 'lowpass'; snd.lp.frequency.value = 900;
@@ -3530,9 +3860,19 @@ function sndVault() {                      // the clatter of going over a window
 function sndClaw() {                       // the claw arriving: a deep falling boom under a harsh descending tone
   const c = snd.ctx; if (!c || !snd.on) return;
   const t = c.currentTime;
-  sndNote(t, 'sine', 95, 2.4, 0.9, 0.05, snd.master, 26);
-  sndNote(t, 'sawtooth', 260, 1.6, 0.2, 0.3, snd.master, 70);
-  sndNote(t + 1.0, 'sine', 140, 0.5, 0.8, 0.005, snd.master, 40);       // the grab
+  // a harsh tone that falls for the second the claw takes to come down; the clash at the grab (sndClash) then cuts everything dead
+  sndNote(t, 'sawtooth', 260, 0.95, 0.2, 0.3, snd.master, 70);
+  sndNote(t, 'sine', 95, 0.95, 0.7, 0.05, snd.master, 40);
+}
+function sndClash() {                      // the claw closing: one hard metallic crash, and then nothing
+  const c = snd.ctx; if (!c || !snd.on) return;
+  const t = c.currentTime + 0.01;
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = snd.bright; f.type = 'highpass'; f.frequency.value = 1800;
+  g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+  s.connect(f); f.connect(g); g.connect(snd.master); s.start(t); s.stop(t + 0.6);
+  for (const [fr, v, d] of [[207, .3, .5], [311, .26, .45], [467, .2, .4], [733, .16, .32], [1109, .1, .25], [1663, .07, .2]]) sndNote(t, 'square', fr, d, v * 0.5, 0.001, snd.master);
+  sndNote(t, 'sine', 120, 0.3, 0.9, 0.002, snd.master, 38);
 }
 function sndPallet() {                     // a plank of wood slamming down: a sharp crack, a heavy thud, then a smaller bounce
   const c = snd.ctx; if (!c || !snd.on) return;
@@ -3549,6 +3889,11 @@ function sndPallet() {                     // a plank of wood slamming down: a s
   crack(t + 0.14, 0.3, 1500, 0.05); sndNote(t + 0.14, 'triangle', 380, 0.07, 0.14, 0.002, snd.master, 290);   // bounce
   sndNote(t + 0.14, 'sine', 130, 0.14, 0.3, 0.003, snd.master, 70);
 }
+function sndClang(t, vol) {                // metal striking metal: a few clashing tones that ring briefly, with a hard tick on the front
+  const f = 0.85 + Math.random() * 0.3;
+  for (const [fr, v, d] of [[311, .22, .5], [527, .16, .4], [853, .12, .3], [1297, .07, .22]]) sndNote(t, 'triangle', fr * f, d, v * vol, 0.002, snd.master);
+  sndNote(t, 'square', 96 * f, 0.09, 0.16 * vol, 0.002, snd.master, 60);
+}
 function sndSting(t) {                     // the jolt when a chase begins
   sndNote(t, 'sawtooth', 220, 1.1, 0.16, 0.01, snd.master, 104);
   sndNote(t, 'sawtooth', 233.1, 1.1, 0.16, 0.01, snd.master, 110);
@@ -3559,7 +3904,22 @@ function sndTick() {
   const t = c.currentTime, playing = mode === 'play' && snd.on;
   const chasing = playing && !$('optNoChaser').checked && chaser.inChase;
   snd.master.gain.setTargetAtTime(snd.on ? snd.vol : 0, t, 0.05);
-  snd.amb.gain.setTargetAtTime(playing ? (chasing ? 0.16 : 0.4) : 0, t, 0.6);             // kept low, and lower still under the music
+  // the instant the claw closes on you, one clash and every running sound is cut dead
+  if (playing && runner.taken && runner.taken.t >= 0.95) {
+    if (!runner.taken.clashed) { runner.taken.clashed = true; sndClash(); }
+    for (const k of ['amb', 'chase', 'end', 'eng', 'siren', 'grind']) { snd[k].gain.cancelScheduledValues(t); snd[k].gain.setTargetAtTime(0, t, 0.012); }
+    snd.wasChase = false; return;
+  }
+  // once a gate is open the ambience stops and the collapse sound takes over, building until the timer runs out
+  const ek = playing && endStart >= 0 ? Math.max(0, Math.min(1, (now - endStart) / CFG.endTime)) : -1;
+  snd.amb.gain.setTargetAtTime(playing && ek < 0 ? (chasing ? 0.16 : 0.4) : 0, t, 0.6);             // kept low, and lower still under the music
+  snd.end.gain.setTargetAtTime(ek < 0 ? 0 : 0.1 + 0.4 * ek, t, 0.4);
+  if (ek >= 0) {
+    snd.endLfo.frequency.setTargetAtTime(1.2 + 5 * ek * ek, t, 0.5);
+    snd.endF.frequency.setTargetAtTime(180 + 1500 * ek * ek, t, 0.5);
+    for (const o of snd.endOscs) o.detune.setTargetAtTime(300 * ek, t, 0.5);
+    snd.endHi.gain.setTargetAtTime(ek > 0.4 ? 0.07 * (ek - 0.4) / 0.6 : 0, t, 0.5);
+  }
   snd.chase.gain.setTargetAtTime(chasing ? 0.8 : 0, t, chasing ? 0.12 : 0.8);
   // Task box engine: only heard within 8 m of a box that has been started, louder the closer you are,
   // and chugging faster and higher the nearer it is to done. A finished box runs smoothly.
@@ -3570,7 +3930,18 @@ function sndTick() {
     const v = Math.pow(1 - d / CFG.engineRange, 1.4);
     if (v > loud) { loud = v; prog = s.state === 'done' ? 1 : Math.min(1, s.prog / CFG.taskTime); }
   }
-  snd.siren.gain.setTargetAtTime(playing && now - (runner.gateT || -9) < 0.25 ? 0.3 : 0, t, 0.12);   // only while the gate is actually being opened
+  // A gate being opened: grinding and clanging machinery for the first half, then the klaxon for the second half.
+  // You hear it while you open one, and from a distance (quieter) while the chaser opens one.
+  let gp = -1, gv = 0;
+  if (playing && now - (runner.gateT || -9) < 0.25) { gp = runner.gateP || 0; gv = 1; }
+  else if (playing && chaser.state === 'opengate' && chaser.floor === runner.floor) {
+    const d = Math.hypot(runner.x - chaser.x, runner.y - chaser.y);
+    if (d < 24) { gp = 1 - chaser.t / CFG.chaserGateTime; gv = Math.pow(1 - d / 24, 1.3); }
+  }
+  const grinding = gp >= 0 && gp < 0.5;
+  snd.siren.gain.setTargetAtTime(gp >= 0.5 ? 0.34 * gv : 0, t, 0.05);
+  snd.grind.gain.setTargetAtTime(grinding ? 0.75 * gv : 0, t, 0.08);
+  if (grinding && t >= (snd.clangT || 0)) { sndClang(t + 0.02, gv); snd.clangT = t + 0.42 + Math.random() * 0.4; }
   snd.eng.gain.setTargetAtTime(loud * 0.5, t, 0.15);
   snd.engLfo.frequency.setTargetAtTime(3.5 + prog * 11, t, 0.2);
   snd.engOsc.frequency.setTargetAtTime(42 + prog * 48, t, 0.2);

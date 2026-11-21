@@ -142,18 +142,47 @@
   .coach { background: var(--panel2); border-left: 3px solid var(--accent); border-radius: 6px;
     padding: 9px 12px; margin: 6px 0; font-size: 13px; }
   .go { margin-top: 14px; color: var(--dim); }
+  #drillBtns { flex-wrap: wrap; }
+  label.row { display: flex; gap: 8px; align-items: center; margin: 6px 0; color: var(--text); }
+  label.row select { flex: 1; min-width: 0; background: #0b0f10; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 5px 8px; font: inherit; }
+  #codeBox { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  #codeBox textarea { min-height: 60px; background: #0b0f10; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 8px; font: 11px Consolas, monospace; resize: vertical; }
+  .smallbtn { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 5px 10px; cursor: pointer; font: inherit; }
+  button.kb { background: #0b0f10; border: 1px solid var(--line); border-bottom-width: 2px; color: var(--text); border-radius: 5px; padding: 1px 8px; font: 12px Consolas, monospace; cursor: pointer; min-width: 44px; }
+  button.kb.wait { border-color: var(--accent); color: var(--accent); }
+  #replayBar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(720px, 94%); display: flex; gap: 6px; align-items: center;
+    background: rgba(21,27,29,.94); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; z-index: 5; }
+  #replayBar button { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 4px 8px; cursor: pointer; font: inherit; }
+  #replayBar button.on { border-color: var(--accent); color: var(--accent); }
+  #rpTrack { position: relative; flex: 1; height: 22px; min-width: 60px; }
+  #rpSeek { position: absolute; inset: 0; width: 100%; accent-color: var(--accent); margin: 0; }
+  #rpTicks { position: absolute; inset: 0; pointer-events: none; }
+  #rpTicks i { position: absolute; top: 0; width: 3px; height: 7px; background: var(--red); border-radius: 1px; }
+  #rpTime { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; min-width: 84px; text-align: right; }
+  .bd { background: var(--panel2); border-radius: 8px; padding: 9px 12px; margin: 8px 0; font-size: 13px; color: var(--dim); }
+  .bd b { color: var(--text); }
+  .bd div { margin: 2px 0; }
+  .spark { display: block; margin-top: 4px; }
+  .card { max-height: 92%; overflow-y: auto; }
+  .card .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .card .btns button { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 12px; cursor: pointer; font: inherit; }
+  .card .btns button.primary { border-color: var(--teal); color: var(--teal); }
+  .prog { max-height: 60vh; overflow-y: auto; }
+  .prog .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px dashed var(--line); padding: 6px 0; }
+  .prog .row small { color: var(--dim); display: block; }
 </style>
 </head>
 <body>
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v0.9</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.0</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
     <div id="drills"></div>
     <div id="drillBtns"></div>
+    <div id="codeBox" class="hide"><textarea id="codeIn" placeholder="Paste a drill code here" spellcheck="false"></textarea><button class="smallbtn" id="codeGo">Add this drill</button></div>
 
     <h2>Chaser</h2>
     <div class="seg" id="diff">
@@ -161,11 +190,35 @@
       <button data-d="normal">Normal</button>
       <button data-d="hard">Hard</button>
     </div>
+    <label class="row">Type <select id="optType">
+      <option value="standard">Standard</option>
+      <option value="sprinter">Sprinter: fast, corners badly</option>
+      <option value="charger">Charger: slower, charges at you</option>
+      <option value="lurker">Lurker: hard to see until close</option>
+    </select></label>
+    <label class="chk"><input type="checkbox" id="optAdapt"> Adaptive: improves as you win <span id="adaptLvl" style="color:var(--dim)"></span></label>
 
     <h2>Training aids</h2>
     <label class="chk"><input type="checkbox" id="optAura"> See chaser through walls</label>
     <label class="chk"><input type="checkbox" id="optPath"> Show chaser's planned route</label>
     <label class="chk"><input type="checkbox" id="optNoChaser"> No chaser (explore the map)</label>
+    <label class="chk"><input type="checkbox" id="optCoach"> Timing feedback on drops and vaults</label>
+    <label class="chk"><input type="checkbox" id="optHeat"> Show where I get hit on this drill <button class="smallbtn" id="heatClear" style="margin-left:auto;padding:1px 8px">Clear</button></label>
+
+    <h2>Round</h2>
+    <label class="chk"><input type="checkbox" id="optHook"> Carried to a hook when caught</label>
+    <label class="chk"><input type="checkbox" id="optBlood"> Injured: blood trail and pained noises</label>
+    <label class="row">Weather <select id="optWeather">
+      <option value="clear">Clear</option>
+      <option value="rain">Rain: tracks wash away, quieter</option>
+      <option value="fog">Fog: short sight both ways</option>
+      <option value="night">Night: you only see nearby</option>
+    </select></label>
+
+    <h2>Display &amp; comfort</h2>
+    <label class="chk"><input type="checkbox" id="optMini"> Minimap on big maps</label>
+    <label class="chk"><input type="checkbox" id="optCB"> Colourblind-friendly colours</label>
+    <label class="chk"><input type="checkbox" id="optVib"> Vibrate when hit (phone or controller)</label>
 
     <h2>Sound</h2>
     <label class="chk"><input type="checkbox" id="optSound"> Ambient sound and chase music</label>
@@ -190,19 +243,18 @@
     <div id="dataMsg"></div>
 
     <h2>Controls</h2>
-    <ul class="keys">
-      <li><span>Move</span><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></li>
-      <li><span>Run / walk</span><kbd>Shift</kbd></li>
-      <li><span>Vault (hold) / drop pallet</span><kbd>Space</kbd></li>
-      <li><span>Restart</span><kbd>R</kbd></li>
-    </ul>
+    <ul class="keys" id="keyList"></ul>
     <ul class="keys">
       <li><span>Controller: move</span><span>Left stick / D-pad</span></li>
       <li><span>Controller: run / walk</span><span>Any bumper or trigger</span></li>
-      <li><span>Controller: vault / drop</span><kbd>A</kbd></li>
-      <li><span>Controller: restart</span><span><kbd>Y</kbd> or Start</span></li>
-      <li><span>Touch</span><span>Drag left side; buttons right</span></li>
     </ul>
+    <ul class="keys" id="padList"></ul>
+    <ul class="keys">
+      <li><span>Touch</span><span>Drag left side; buttons right</span></li>
+      <li><span>Replay</span><span><kbd>P</kbd> after a run</span></li>
+      <li><span>Editor undo / redo</span><span><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></span></li>
+    </ul>
+    <div style="font-size:12px;color:var(--dim);margin:4px 0">Click a key above, then press the key or controller button you want. <button class="smallbtn" id="kbReset" style="padding:1px 8px">Reset</button></div>
     <div id="padStatus"></div>
     <label class="chk"><input type="checkbox" id="optShiftRun"> Hold Shift to run (off: Shift walks)</label>
 
@@ -263,6 +315,11 @@
       <select id="edStamp"></select>
       <button id="edRot">Rotate (R)</button>
       <button id="edMir">Mirror (M)</button>
+      <button id="edUndo" title="Ctrl+Z">Undo</button>
+      <button id="edRedo" title="Ctrl+Y">Redo</button>
+      <button id="edCopy" title="Ctrl+C: copy the selected structure">Copy</button>
+      <button id="edPaste" title="Ctrl+V">Paste</button>
+      <select id="edSym" title="Build symmetrically"><option value="">Symmetry: off</option><option value="x">Mirror left / right</option><option value="y">Mirror top / bottom</option><option value="xy">Mirror both ways</option></select>
       <input id="stName" type="text" maxlength="30" placeholder="Stamp name">
       <button id="stSave">Save stamp</button>
       <button id="stDel">Delete stamp</button>
@@ -286,6 +343,13 @@
         <div id="stickBase" class="hide"><div id="stickKnob"></div></div>
         <button id="tRun" class="on">RUN</button>
         <button id="tAct">ACTION</button>
+      </div>
+      <div id="replayBar" class="hide">
+        <button id="rpPlay">Pause</button>
+        <div id="rpTrack"><input type="range" id="rpSeek" min="0" max="1000" value="0"><div id="rpTicks"></div></div>
+        <span id="rpTime"></span>
+        <button data-sp="0.25">&frac14;&times;</button><button data-sp="0.5">&frac12;&times;</button><button data-sp="1" class="on">1&times;</button><button data-sp="2">2&times;</button>
+        <button id="rpExit">Done</button>
       </div>
       <div id="overlay"><div class="card" id="card"></div></div>
     </div>
@@ -374,11 +438,37 @@ const MAPS = [
     '.......................................C....',
     '............................................',
   ]},
+  { id: 'tr-pallet', name: 'Pallet Timing', desc: 'Drill: drop at the last safe moment (10 rounds)', trainer: 'pallet', rows: [
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '...C......R...P...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+  ]},
+  { id: 'tr-window', name: 'Window Timing', desc: 'Drill: learn how much gap a vault needs (10 rounds)', trainer: 'window', rows: [
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..C......R....W...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+    '..............#...............',
+  ]},
 ];
 
 const CFG = {
   runnerSpeed: 4.0, walkSpeed: 2.26, boostSpeed: 6.0, boostTime: 1.8,
-  markLife: 7, markGap: 0.4,
+  markLife: 7, markGap: 0.4, bloodLife: 12,
   gateTime: 8, hatchAfter: 120,  // seconds of holding to open a gate; seconds in chase before the hatch opens
   taskTime: 10,                  // seconds of holding to finish one task box
   kickTime: 2,                   // seconds the chaser takes to damage a task box
@@ -663,18 +753,20 @@ function loadMap() {
 
   runner = { x: rs[0], y: rs[1], r: 0.3, hp: 2, boost: 0, face: 0, vault: null,
              lastDx: 0, lastDy: 0, headT: 0, vx: 0, vy: 0, running: false, lastRunT: -9, markDist: 0,
-             hidden: null, hideFrom: null, slowT: 0, hill: 0, onRamp: false };
-  marks = []; selSet.clear();
+             hidden: null, hideFrom: null, slowT: 0, hill: 0, onRamp: false, carried: null, hooked: null, bloodDist: 0, groanNext: 0 };
+  marks = []; blood = []; selSet.clear();
   chaser = { x: cs[0], y: cs[1], r: 0.36, state: 'chase', t: 0, face: Math.PI, dx: 0, dy: 0,
              path: null, repath: 0, cell: -1, prevCell: -1, chaseT: 0, fakeUntil: -9, fakeCell: -1,
              sees: true, target: null, vault: null, tier: 0,
              kx: cs[0], ky: cs[1], tracked: false, saw: false, inChase: false, lastLeadT: -9, markT: -9,
              onLead: false, arriveT: -9, lastSawT: -9, lockerTarget: null, lockPt: null, taskTarget: null, taskPt: null, bushT: {}, slowT: 0, hill: 0, onRamp: false };
   stats = { time: 0, stuns: 0, drops: 0, earlyDrops: 0, fast: 0, slow: 0, dodges: 0,
-            vaultHits: 0, jams: 0, maxTier: 0, breaks: 0, palletHits: 0, closest: 99, lost: 0, chase: 0, chases: 0, tasks: 0, hides: 0, grabs: 0, loudVaults: 0, kicked: 0 };
+            vaultHits: 0, jams: 0, maxTier: 0, breaks: 0, palletHits: 0, closest: 99, lost: 0, chase: 0, chases: 0, tasks: 0, hides: 0, grabs: 0, loudVaults: 0, kicked: 0,
+            dropLog: [], vaultLog: [], losBreaks: 0, loops: [], anchor: null, anchorT: 0, wriggles: 0 };
   runner.floor = 0; runner.stairLock = false;
   chaser.floor = 0; chaser.stairLock = false; chaser.kf = 0; chaser.kvia = -1;   // kf: the floor it thinks you are on
   now = 0; floaters = []; flash = 0; endStart = -1; autoGate = null; gateTried = false;
+  trainer = null; CH = chaserProfile(); miniCache = null;
   resize();
 }
 
@@ -804,7 +896,7 @@ function spawnExitGate() {
 }
 function startEndgame(byChaser) {
   if (endStart >= 0) return;
-  endStart = now;
+  endStart = now; if (rec) rec.endStart = now;
   say((byChaser ? 'The chaser opened the gate' : 'The gate is open') + ' — ' + CFG.endTime / 60 + ' minutes to get ' + (hasExitLine ? 'across the exit line!' : 'out!'));
   if (snd.ctx && snd.on) sndSting(snd.ctx.currentTime);
 }
@@ -938,7 +1030,7 @@ function hpop(h) {
 const along = (s, dx) => s.axis === 'x' ? dx !== 0 : dx === 0;
 const ROT_CH = { F: 'N', N: 'Q', Q: 'V', V: 'F', 1: '2', 2: '1', L: '3', 3: '4', 4: '5', 5: 'L' }, MIR_CH = { F: 'N', N: 'F', Q: 'V', V: 'Q', 1: '2', 2: '1', 3: '5', 5: '3' };   // how angled tiles change when turned or flipped
 function findPath(si, ti, pen) {
-  const speed = DIFF[diffKey].speed;
+  const speed = (CH || DIFF[diffKey]).speed;
   const vaultCost = CFG.chaserVault * speed, breakCost = CFG.breakTime * speed;
   // A place is a tile on a floor, numbered floor * (tiles per floor) + tile. si, ti and the result use these numbers.
   const N = W * H;
@@ -1012,31 +1104,32 @@ const touch = { x: 0, y: 0, act: false, run: true, id: null, ox: 0, oy: 0 };
 let lastSrc = 'key';
 function inputDir() {
   let x = 0, y = 0;
-  if (keys.has('KeyA') || keys.has('ArrowLeft')) x--;
-  if (keys.has('KeyD') || keys.has('ArrowRight')) x++;
-  if (keys.has('KeyW') || keys.has('ArrowUp')) y--;
-  if (keys.has('KeyS') || keys.has('ArrowDown')) y++;
+  if (kbHas('left')) x--;
+  if (kbHas('right')) x++;
+  if (kbHas('up')) y--;
+  if (kbHas('down')) y++;
   const l = Math.hypot(x, y);
   if (l) { lastSrc = 'key'; return [x / l, y / l]; }
   if (pad.x || pad.y) { lastSrc = 'pad'; return [pad.x, pad.y]; }
   if (touch.x || touch.y) { lastSrc = 'touch'; return [touch.x, touch.y]; }
   return [0, 0];
 }
-const actionHeld = () => keys.has('Space') || pad.a || touch.act;
+const actionHeld = () => kbHas('act') || pad.a || touch.act;
 function pollPad() {
   // Read every connected pad and combine them: some PCs list a second, idle device ahead of the real controller.
   let pads = [], blocked = false;
   try { pads = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(g => g && g.connected); }
   catch (e) { blocked = true; }
   const wasA = pad.a, wasStart = pad.start;
-  let x = 0, y = 0, a = false, run = false, start = false, active = false;
+  let x = 0, y = 0, a = false, run = false, start = false, active = false; const down = [];
   for (const gp of pads) {
     const b = i => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.5));
     let gx = gp.axes[0] || 0, gy = gp.axes[1] || 0;
     if (Math.hypot(gx, gy) < 0.3) { gx = 0; gy = 0; }
     if (b(14)) gx = -1; if (b(15)) gx = 1; if (b(12)) gy = -1; if (b(13)) gy = 1;   // d-pad
     if (gx || gy) { x = gx; y = gy; }
-    a = a || b(0); run = run || b(4) || b(5) || b(6) || b(7); start = start || b(9) || b(3);
+    a = a || b(PADK.act); run = run || b(4) || b(5) || b(6) || b(7); start = start || b(9) || b(PADK.restart);
+    for (let i = 0; i < gp.buttons.length; i++) if (b(i)) down.push(i);
     if (gx || gy || gp.buttons.some(q => q.pressed || q.value > 0.5) || Array.from(gp.axes).some(v => Math.abs(v) > 0.5)) active = true;
   }
   const l = Math.hypot(x, y); if (l) { x /= l; y /= l; }
@@ -1050,6 +1143,11 @@ function pollPad() {
         ' · sticks: ' + Array.from(g.axes).map(v => v.toFixed(1)).join(' ') +
         ' · buttons down: ' + (g.buttons.map((q, i) => q.pressed || q.value > 0.5 ? i : -1).filter(i => i >= 0).join(' ') || 'none')).join('');
   if (status !== pad.status) { pad.status = status; $('padStatus').textContent = status; $('padStatus').classList.toggle('ok', pads.length > 0); }
+  const fresh = down.filter(i => !(pad.down || []).includes(i)); pad.down = down;
+  if (padCapture) {                                    // choosing a controller button in the controls list
+    if (fresh.length) { PADK[padCapture] = fresh[0]; padCapture = null; store('lt_padkeys', JSON.stringify(PADK)); buildKeyList(); }
+    pad.a = wasA; pad.start = wasStart; return;
+  }
   if (mode === 'edit') return;
   if (pad.a && !wasA) { lastSrc = 'pad'; if (mode === 'play') spacePressed = true; else startRun(); }
   if (pad.start && !wasStart) startRun();
@@ -1116,17 +1214,20 @@ function nearestAction(dx, dy) {
 }
 
 function dropPallet(s) {
+  const wasBait = chaser.state === 'bait';
   s.state = 'down'; stats.drops++; sndPallet();
   const cx = s.x + .5, cy = s.y + .5, c = chaser;
   const cd = Math.hypot(c.x - runner.x, c.y - runner.y);
   if (cd > 5) stats.earlyDrops++;
   // stun if the chaser is under it
+  let stunned = false;
   let nx = Math.max(s.x, Math.min(c.x, s.x + 1)), ny = Math.max(s.y, Math.min(c.y, s.y + 1));
   if (s.diag) { const E = diagEnds(s); [nx, ny] = segClosest(c.x, c.y, E[0], E[1], E[2], E[3]); }   // a diagonal pallet only catches what is under its line
   if (Math.hypot(c.x - nx, c.y - ny) < c.r + (s.diag ? 0.3 : 0.15) && c.state !== 'stun' && c.state !== 'vault' && c.floor === runner.floor) {
-    c.state = 'stun'; c.t = CFG.stunTime; c.chaseT = 0; stats.stuns++;
-    floatText(c.x, c.y - .8, 'STUN!', '#f0b648'); say('Pallet stun');
+    c.state = 'stun'; c.t = CFG.stunTime; c.chaseT = 0; stats.stuns++; stunned = true;
+    floatText(c.x, c.y - .8, 'STUN!', '#f0b648'); say('Pallet stun'); buzz(120, .4);
   }
+  judgeDrop(s, stunned, wasBait);
   // push anyone standing in the gap out to one side
   for (const e of c.floor === runner.floor ? [runner, c] : [runner]) {
     const a = s.axis === 'x' ? e.x - cx : e.y - cy, lat = s.axis === 'x' ? e.y - cy : e.x - cx;
@@ -1158,13 +1259,14 @@ function startRunnerVault(a) {
     sndVault(); stats.loudVaults++;
     const c = chaser;
     if (!$('optNoChaser').checked && c.floor === runner.floor && c.state !== 'stun' &&
-        Math.hypot(c.x - runner.x, c.y - runner.y) < CFG.vaultHear) {
+        Math.hypot(c.x - runner.x, c.y - runner.y) < CFG.vaultHear * WX.hear) {
       if (!c.inChase && !c.saw) floatText(runner.x, runner.y - 1.1, 'heard!', '#e2503f');
       c.kx = runner.vault.tx; c.ky = runner.vault.ty; c.kf = runner.floor; c.kvia = -1; c.lastLeadT = now; c.onLead = true; c.repath = 0;
     }
   }
   if (fast) { stats.fast++; floatText(runner.x, runner.y - .6, 'fast vault', '#4fd1b5'); }
   else { stats.slow++; floatText(runner.x, runner.y - .6, 'slow vault', '#8a9a98'); }
+  judgeVault(fast);
   if (s.type === 'window') {
     if (now - s.lastVault > 20) s.vaults = 0;
     s.vaults++; s.lastVault = now;
@@ -1196,6 +1298,7 @@ function leaveLocker() {
 }
 function updateRunner(dt) {
   const r = runner;
+  if (r.carried || r.hooked) { carriedRunner(dt); return; }
   if (r.boost > 0) r.boost -= dt;
   if (r.slowT > 0) r.slowT -= dt;
   if (r.hidden) {                     // inside a locker: no moving until you step out
@@ -1207,11 +1310,11 @@ function updateRunner(dt) {
     const v = r.vault; v.p += dt / v.dur;
     const p = Math.min(1, v.p);
     r.x = v.fx + (v.tx - v.fx) * p; r.y = v.fy + (v.ty - v.fy) * p;
-    if (v.p >= 1) r.vault = null;
+    if (v.p >= 1) { r.vault = null; if (trainer && trainer.vault) trainerVaultLanded(); }
     return;
   }
   const [dx, dy] = inputDir();
-  const shift = keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.run;
+  const shift = kbHas('run') || pad.run;
   // touch has its own Run/Walk toggle; keyboard and controller use the Shift / shoulder-button rule
   r.running = !!(dx || dy) && (lastSrc === 'touch' ? touch.run : ($('optShiftRun').checked ? shift : !shift));
   if (dx || dy) {
@@ -1282,22 +1385,38 @@ function updateRunner(dt) {
       r.markDist = 0;
       marks.push({ x: r.x + (Math.random() - .5) * .7, y: r.y + (Math.random() - .5) * .7,
                    a: r.face + (Math.random() - .5) * 1.4, t: now, rx: r.x, ry: r.y, f: r.floor });
+      if (rec) rec.marks.push(marks[marks.length - 1]);
     }
   }
+  injuredTick(dt, !!(dx || dy));
 }
 
 /* ---------- Chaser ---------- */
 function hitRunner() {
   const r = runner, c = chaser;
-  r.hp--; flash = 1;
-  if (r.vault) stats.vaultHits++;
+  c.charge = false;
+  if (trainer) {                       // a timing drill: a hit ends the round instead of costing health
+    flash = 1; buzz(200, .8); c.state = 'cool'; c.t = CFG.hitCool;
+    if (trainer.kind === 'pallet') trainerResult('late', 'Too late: you were hit before dropping it', '#e2503f');
+    else trainerResult(r.vault ? 'risky' : 'late', r.vault ? 'Hit mid-vault: it was too close to vault' : 'Hit before vaulting: vault sooner', '#e2503f');
+    if (r.vault) { r.vault = null; trainer.vault = null; }
+    return;
+  }
+  r.hp--; flash = 1; buzz(250, 1);
+  if (r.vault) { stats.vaultHits++; const lv = stats.vaultLog[stats.vaultLog.length - 1]; if (lv) lv.hit = true; }
   for (const s of specials)
-    if (s.type === 'pallet' && s.state === 'up' && Math.hypot(s.x + .5 - r.x, s.y + .5 - r.y) < 1.8)
-      { stats.palletHits++; break; }
+    if (s.type === 'pallet' && s.state === 'up' && Math.hypot(s.x + .5 - r.x, s.y + .5 - r.y) < 1.8) {
+      stats.palletHits++; stats.dropLog.push({ v: 'late', w: 0 });
+      if ($('optCoach').checked) floatText(r.x, r.y - 1.3, 'should have dropped it', '#e2503f');
+      break;
+    }
   floatText(r.x, r.y - .7, 'HIT', '#e2503f');
+  if (rec) rec.ev.push({ t: now, k: 'hit', x: r.x, y: r.y, f: r.floor });
+  saveHit(r);
   c.state = 'cool'; c.t = CFG.hitCool; c.chaseT = 0;
   for (const s of specials) s.vaults = 0;
-  if (r.hp <= 0) endRun(); else { r.boost = CFG.boostTime; say('Injured — one more hit ends the run'); }
+  if (r.hp <= 0) { if ($('optHook').checked && startCarry()) return; endRun(); }
+  else { r.boost = CFG.boostTime; say('Injured — one more hit ends the run'); }
 }
 
 function turnToward(c, tx, ty, rate, dt) {
@@ -1338,31 +1457,44 @@ function pickSearch(c, local) {
 }
 
 function updateChaser(dt) {
-  const c = chaser, r = runner, D = DIFF[diffKey];
+  const c = chaser, r = runner, D = CH || DIFF[diffKey];
+  if (c.state === 'carry') { carryStep(dt, D); return; }
   const dist = Math.hypot(r.x - c.x, r.y - c.y), same = r.floor === c.floor;   // on different floors it can neither see nor reach you
   c.sees = same && los(c.x, c.y, r.x, r.y) && !(r.bushHide && !(dist <= 0.45 || (c.poke && dist <= 0.8)));   // hidden in a bush unless it bumps right into you, or is searching that bush
   if (same) stats.closest = Math.min(stats.closest, dist);
+  // a broken line of sight: it lost sight of you for over a second during a chase
+  if (c.inChase && !c.sees) { if (!c.losFrom) c.losFrom = now; else if (!c.losCounted && now - c.losFrom > 1) { c.losCounted = true; stats.losBreaks++; } }
+  else if (c.sees) { c.losFrom = 0; c.losCounted = false; }
 
   // The chaser has to find you. It only gets a lead by seeing you or seeing a scratch mark.
   // Out of chase it only notices things in front of it (or very close); in chase it sees all round.
   const inArc = (x, y) => Math.cos(Math.atan2(y - c.y, x - c.x) - c.face) > 0.26;   // about 75 degrees each side
-  c.saw = c.sees && dist < 26 && (c.inChase || dist < 3 || inArc(r.x, r.y));
+  c.saw = c.sees && dist < WX.sight && (c.inChase || dist < 3 || inArc(r.x, r.y));
   let lead = c.saw;
   // Once a chase is on, it can also hear you running close by, so it can cut you off round a loop.
-  const heard = same && c.inChase && dist < 9 && now - r.lastRunT < 0.3 && !r.bushHide;   // a bush you are hidden in muffles your footsteps
+  const heard = same && c.inChase && dist < 9 * WX.hear && now - r.lastRunT < 0.3 && !r.bushHide;   // a bush you are hidden in muffles your footsteps
   if (c.saw) c.lastSawT = now;
   if (c.saw || heard) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; c.leadKind = 'sight'; }
   else {
     let best = null;
     for (const m of marks) {
       if ((m.f || 0) !== c.floor) continue;
-      if (m.t <= c.markT || now - m.t > CFG.markLife) continue;
+      if (m.t <= c.markT || now - m.t > markLifeNow()) continue;
       const d = Math.hypot(m.x - c.x, m.y - c.y);
-      if (d > 10 || !(c.inChase || d < 3 || inArc(m.x, m.y)) || !los(c.x, c.y, m.rx, m.ry)) continue;
+      if (d > WX.markSee || !(c.inChase || d < 3 || inArc(m.x, m.y)) || !los(c.x, c.y, m.rx, m.ry)) continue;
       if (!best || m.t > best.t) best = m;
     }
     if (best) {   // follow the freshest mark it can see; a mark on a staircase means the trail carries on upstairs or down
       c.kx = best.rx; c.ky = best.ry; c.kf = c.floor; c.kvia = best.via ? 1 - c.floor : -1; c.markT = best.t; lead = true; c.leadKind = 'marks';
+    } else {   // no scratch marks in view: a fresh blood trail will do
+      let bb = null;
+      for (const b of blood) {
+        if (b.f !== c.floor || b.t <= c.markT || now - b.t > bloodLifeNow()) continue;
+        const d = Math.hypot(b.x - c.x, b.y - c.y);
+        if (d > 7 || !(c.inChase || d < 2.5 || inArc(b.x, b.y)) || !los(c.x, c.y, b.x, b.y)) continue;
+        if (!bb || b.t > bb.t) bb = b;
+      }
+      if (bb) { c.kx = bb.x; c.ky = bb.y; c.kf = c.floor; c.kvia = -1; c.markT = bb.t; lead = true; c.leadKind = 'marks'; }
     }
   }
   if (lead) { c.lastLeadT = now; c.onLead = true; c.poke = false; }
@@ -1495,6 +1627,16 @@ function updateChaser(dt) {
     return;
   }
   if (c.state === 'stun') { c.t -= dt; if (c.t <= 0) { c.state = 'chase'; c.path = null; } return; }
+  if (c.state === 'bait') {           // mind game: holding back short of the pallet, waiting for you to drop it
+    c.t -= dt; const l = dist || 1; turnToward(c, (r.x - c.x) / l, (r.y - c.y) / l, 8, dt);
+    if (c.saw && dist < D.trig) c.state = 'chase';                     // you came too close: it goes for you
+    else { if (c.t <= 0 || !c.saw) { c.state = 'chase'; c.path = null; } return; }
+  }
+  if (c.state === 'windup') {         // a charger gathering itself before it charges
+    c.t -= dt; const l = dist || 1; turnToward(c, (r.x - c.x) / l, (r.y - c.y) / l, 6, dt);
+    if (c.t <= 0) { c.state = 'lunge'; c.t = 0.95; c.charge = true; c.face = Math.atan2(r.y + r.vy * 0.25 - c.y, r.x + r.vx * 0.25 - c.x); }
+    return;
+  }
   if (c.state === 'break') {
     c.t -= dt;
     if (c.t <= 0) { c.target.state = 'broken'; c.state = 'chase'; c.chaseT = 0; c.path = null; stats.breaks++; }
@@ -1508,15 +1650,15 @@ function updateChaser(dt) {
   }
   if (c.state === 'lunge') {
     const l = dist || 1;
-    turnToward(c, (r.x - c.x) / l, (r.y - c.y) / l, 1.6, dt);
-    c.x += Math.cos(c.face) * CFG.lungeSpeed * dt; c.y += Math.sin(c.face) * CFG.lungeSpeed * dt;
+    turnToward(c, (r.x - c.x) / l, (r.y - c.y) / l, c.charge ? 0.7 : 1.6, dt);
+    const ls = c.charge ? 8.6 : CFG.lungeSpeed; c.x += Math.cos(c.face) * ls * dt; c.y += Math.sin(c.face) * ls * dt;
     resolve(c);
     const d2 = Math.hypot(r.x - c.x, r.y - c.y);
     const safe = r.vault && r.vault.p > 0.55;
     if (d2 < CFG.hitRange && !safe && same && los(c.x, c.y, r.x, r.y)) { hitRunner(); return; }
     c.t -= dt;
     if (c.t <= 0) {
-      c.state = 'cool'; c.t = CFG.missCool; stats.dodges++;
+      c.state = 'cool'; c.t = CFG.missCool; stats.dodges++; c.charge = false;
       floatText(r.x, r.y - .7, 'dodged', '#4fd1b5');
     }
     return;
@@ -1532,6 +1674,21 @@ function updateChaser(dt) {
   }
   const speed = (D.speed + c.tier * 0.2) * speedMul * (GROUND_SPEED[groundAt(c.x, c.y)] || 1) * (c.slowT > 0 ? 0.4 : 1);
 
+  // mind game: stop short of a standing pallet you are waiting at, to bait you into dropping it early
+  if (c.state === 'chase' && c.saw && c.inChase && D.bait > 0 && now > (c.baitNext || 0)) {
+    const P = specials.find(s => s.type === 'pallet' && s.state === 'up' && Math.hypot(s.x + .5 - r.x, s.y + .5 - r.y) < 1.7);
+    if (P) {
+      const dp = Math.hypot(P.x + .5 - c.x, P.y + .5 - c.y);
+      if (dp > 1.9 && dp < 3.6 && dist > D.trig) {
+        c.baitNext = now + 7;
+        if (Math.random() < D.bait) { c.state = 'bait'; c.t = 0.5 + Math.random() * 0.7; return; }
+      }
+    }
+  }
+  // a charger winds up, then charges a long way in a straight line
+  if (D.type === 'charger' && c.state === 'chase' && c.saw && now > (c.chargeNext || 0) && dist > 2.8 && dist < 7 && walkClear(c.x, c.y, r.x, r.y, 0.3)) {
+    c.state = 'windup'; c.t = 0.55; c.chargeNext = now + 6; return;
+  }
   // attack?
   if (c.state === 'chase' && c.saw && !(r.vault && r.vault.p > 0.55)) {
     const open = walkClear(c.x, c.y, r.x, r.y, 0.15);
@@ -1646,20 +1803,30 @@ function update(dt) {
     if (s.prog <= 0) { s.prog = 0; s.regress = false; }
   }
   // every task box done, and no gate was placed by hand: the exit gate appears somewhere on the outer wall
-  if (mode === 'play' && !autoGate && !gateTried && tasksAllDone() && !allSpecials().some(s => s.type === 'gate')) spawnExitGate();
+  if (mode === 'play' && !autoGate && !gateTried && tasksAllDone() && !allSpecials().some(s => s.type === 'gate')) {
+    const seed = (Math.random() * 1e9) | 0;          // kept, so a replay puts the gate in the same place
+    if (withSeed(seed, spawnExitGate) && rec) rec.ev.push({ t: now, k: 'gate', seed });
+  }
   if (mode === 'play' && !hatchSaid && hatchOpen() && allSpecials().some(s => s.type === 'hatch')) { hatchSaid = true; say('The hatch has opened'); }
   if (mode === 'play' && endStart >= 0 && now - endStart >= CFG.endTime) {
     if (runner.hidden) leaveLocker();
+    if (runner.carried || runner.hooked) { runner.carried = runner.hooked = null; chaser.state = 'cool'; chaser.t = 9; }
     runner.vault = null; runner.vx = runner.vy = 0; runner.taken = { t: 0 }; say('Time ran out'); sndClaw();
+    if (rec) rec.ev.push({ t: now, k: 'claw' });
   }
+  if (mode === 'play') { extrasTick(dt); recTick(); }
   spacePressed = false;
 }
 
 function endRun(escapedBy) {
   mode = 'over';
+  recEnd(); closeLoop();
+  if (escapedBy === 'trainer') { trainerCard(); return; }
   const taken = escapedBy === 'claw'; if (taken) escapedBy = null;
-  const t = stats.chase, prev = getBest(mapIdx, diffKey), isBest = t > prev;
+  const hooked = escapedBy === 'hooked'; if (hooked) escapedBy = null;
+  const t = stats.chase, prev = getBest(mapIdx, diffKey), isBest = t > prev && !trainer;
   if (isBest) store(bestKey(mapIdx, diffKey), t.toFixed(1));
+  const hist = pushHistory(t, !!escapedBy), adaptMsg = adaptUpdate(t, !!escapedBy);
   const rank = t < 20 ? 'Caught quick' : t < 45 ? 'Getting there' : t < 90 ? 'Solid runner'
              : t < 150 ? 'Slippery' : 'Uncatchable';
   const tips = [];
@@ -1671,13 +1838,14 @@ function endRun(escapedBy) {
   if (stats.maxTier >= 2) tips.push('The chaser reached momentum tier ' + stats.maxTier + '. Long chases with no stun or pallet break make them faster — force a break or change loops sooner.');
   if (!stats.drops && allSpecials().some(s => s.type === 'pallet')) tips.push('You never dropped a pallet. An unused pallet is worth nothing once you\'re down.');
   if (stats.grabs) tips.unshift('You were pulled out of a locker. Only hide when the chaser hasn\'t seen you get in, and walk the last few steps — scratch marks lead it straight to the door.');
+  if (hooked) tips.unshift(stats.wriggles ? 'You wriggled free once, but got carried to a hook in the end. Start mashing the moment you are picked up.' : 'You were carried to a hook. Mash the action button (or rock left and right) the moment you are picked up to wriggle free.');
   if (taken) tips.unshift('The collapse timer ran out. Once a gate is open you have ' + CFG.endTime / 60 + ' minutes to leave by a gate or the hatch, whoever opened it.');
   if (escapedBy) tips.unshift(escapedBy === 'gate' ? 'You opened the exit gate and got out. Opening it takes ' + CFG.gateTime + ' s of standing still, so you had to earn that distance first.'
                                                     : 'You survived ' + hatchWait() + ' in chase and escaped through the hatch.');
   if (!tips.length) tips.push(t < 30 ? 'Stay on one loop and focus only on cutting corners tight. Turn on "See chaser through walls" until the rhythm clicks.'
                                      : 'Clean run. Try the next difficulty, or turn the training aids off.');
   $('card').innerHTML =
-    '<h3>' + (escapedBy ? 'Escaped!' : taken ? 'Taken' : 'Caught') + (isBest ? ' — new best!' : '') + '</h3>' +
+    '<h3>' + (escapedBy ? 'Escaped!' : taken ? 'Taken' : hooked ? 'Hooked' : 'Caught') + (isBest ? ' — new best!' : '') + '</h3>' +
     '<div class="big">' + t.toFixed(1) + 's</div><div class="rank">in chase — ' + rank + '</div>' +
     '<div class="grid">' +
     '<div>Total time alive <b>' + stats.time.toFixed(1) + 's</b></div><div>Times you lost the chaser <b>' + stats.lost + '</b></div>' +
@@ -1685,9 +1853,9 @@ function endRun(escapedBy) {
     '<div>Fast vaults <b>' + stats.fast + '</b></div><div>Slow vaults <b>' + stats.slow + '</b></div>' +
     '<div>Lunges dodged <b>' + stats.dodges + '</b></div><div>Pallets broken <b>' + stats.breaks + '</b></div>' +
     (allSpecials().some(s => s.type === 'task') ? '<div>Tasks done <b>' + stats.tasks + '/' + allSpecials().filter(s => s.type === 'task').length + '</b></div><div></div>' : '') +
-    '</div>' + tips.slice(0, 3).map(x => '<div class="coach">' + x + '</div>').join('') +
-    '<div class="go">Press <kbd>Space</kbd> or <kbd>R</kbd>, <kbd>A</kbd> on a controller, or tap here to run it again</div>';
-  $('overlay').classList.remove('hide');
+    '</div>' + breakdownHTML() + progressLine(hist) + (adaptMsg ? '<div class="coach">' + adaptMsg + '</div>' : '') +
+    tips.slice(0, 3).map(x => '<div class="coach">' + x + '</div>').join('') + cardButtons();
+  $('overlay').classList.remove('hide'); lastCard = $('card').innerHTML;
   buildDrills();
 }
 
@@ -1740,6 +1908,7 @@ function savedUp(m) {
   return { rows: c(m.up.rows), ground: c(m.up.ground), rail: c(m.up.rail) };
 }
 function saveCustom() {
+  edTrack();
   store('lt_custom', JSON.stringify(MAPS.filter(m => m.custom).map(m =>
     ({ id: m.id, name: m.name, rows: savedRows(m), ground: savedGround(m), rail: savedRail(m), objs: savedObjs(m), up: savedUp(m) }))));
 }
@@ -2036,13 +2205,13 @@ function loadCustom() {
 }
 // Random map: a box of a random size with a mix of the built-in and saved structures turned and mirrored at random, then
 // task boxes, lockers, a hatch, hooks and scenery scattered in the gaps. It is saved as a custom drill, so it can be edited.
-function randomDrill() {
+function randomDrill(daily) {
   const rnd = n => Math.floor(Math.random() * n), pick = a => a[rnd(a.length)];
   const rot = rows => { const h = rows.length, w = rows[0].length, o = []; for (let x = 0; x < w; x++) { let s = ''; for (let y = h - 1; y >= 0; y--) s += ROT_CH[rows[y][x]] || rows[y][x]; o.push(s); } return o; };
   const flip = rows => rows.map(r => r.split('').reverse().map(c => MIR_CH[c] || c).join(''));
   // every structure in the stamp list: the built-in ones (as you last saved them) and your own
-  const pool = allStamps().filter(s => s.rows.length && s.rows.length <= 30 && s.rows.every(r => r.length <= 40) && s.rows.some(r => /[^.]/.test(r)));
-  const mine = pool.filter(s => userStamps.includes(s)).sort(() => Math.random() - .5).slice(0, 5);
+  const pool = (daily ? STAMPS : allStamps()).filter(s => s.rows.length && s.rows.length <= 30 && s.rows.every(r => r.length <= 40) && s.rows.some(r => /[^.]/.test(r)));
+  const mine = daily ? [] : pool.filter(s => userStamps.includes(s)).sort(() => Math.random() - .5).slice(0, 5);
   const big = pool.find(s => s.name === 'Large main building');
   let best = null;
   for (let attempt = 0; attempt < 30 && !best; attempt++) {
@@ -2156,7 +2325,8 @@ function randomDrill() {
   }
   if (!best) { say('Could not build a random map this time — try again'); return; }
   const n = MAPS.filter(m => m.custom && /^Random map/.test(m.name)).length + 1;
-  MAPS.push({ id: 'c' + Date.now().toString(36), name: 'Random map ' + n, desc: 'Random map', rows: best.rows, custom: true, ground: best.ground });
+  MAPS.push(daily ? { id: 'daily-' + daily, name: 'Daily ' + daily, desc: 'Daily map: the same for everyone today', rows: best.rows, custom: true, ground: best.ground }
+                  : { id: 'c' + Date.now().toString(36), name: 'Random map ' + n, desc: 'Random map', rows: best.rows, custom: true, ground: best.ground });
   mapIdx = MAPS.length - 1; delArmed = false; store('lt_map', mapIdx); saveCustom(); buildDrills(); showMenu();
 }
 function newDrill(copy) {  const src = MAPS[mapIdx], n = MAPS.filter(m => m.custom).length + 1;
@@ -2176,7 +2346,7 @@ function enterEdit() {
   leaveWorkspace(); sel = null; if (tool === 'outline') tool = '#';
   outCells = []; outStrokes = 0; outStarts = []; syncOutlineBtns();
   const w = Math.max(...m.rows.map(r => r.length)); m.rows = m.rows.map(r => r.padEnd(w, '.'));
-  mode = 'edit'; hover = null; loadMap(); $('overlay').classList.add('hide');
+  mode = 'edit'; hover = null; loadMap(); $('overlay').classList.add('hide'); edReset();
   $('edName').value = m.name; $('edW').value = w; $('edH').value = m.rows.length;
   if (tool === 'stamp' && !stampRows) tool = '#';
   for (const b of document.querySelectorAll('#tools button')) b.classList.toggle('on', b.dataset.t === tool);
@@ -2591,21 +2761,23 @@ function resizeDrill() {
 }
 
 function showMenu() {
-  leaveWorkspace(); settleFloors(); mode = 'menu'; loadMap(); setBars(false);
+  leaveWorkspace(); settleFloors(); mode = 'menu'; loadMap(); setBars(false); $('replayBar').classList.add('hide'); replay = null;
   $('card').innerHTML = '<h3>' + esc(MAPS[mapIdx].name) + '</h3>' +
-    '<div class="coach">You are the <b style="color:#4fd1b5">teal</b> dot. The chaser is faster than you in a straight line — ' +
+    '<div class="coach">You are the <b style="color:' + PAL.run + '">' + PAL.name + '</b> dot. The chaser is faster than you in a straight line — ' +
     'you only gain time by using walls, windows and pallets. Two hits and the run is over.</div>' +
-    '<div class="coach">' + ($('optShiftRun').checked ? 'Hold <kbd>Shift</kbd> to run.' : 'Hold <kbd>Shift</kbd> to walk.') +
+    '<div class="coach">' + ($('optShiftRun').checked ? 'Hold <kbd>' + keyLabel(KB.run[0]) + '</kbd> to run.' : 'Hold <kbd>' + keyLabel(KB.run[0]) + '</kbd> to walk.') +
     ' Running leaves scratch marks the chaser can follow; walking is slow but leaves none.</div>' +
     '<div class="coach">The chaser starts out hunting and doesn\'t know where you are. A chase begins when it sees you or your scratch marks. Your score is time spent in chase.</div>' +
-    '<div class="go">Press <kbd>Space</kbd>, <kbd>A</kbd> on a controller, or tap here to start</div>';
+    menuExtras() + '<div class="go">Press <kbd>' + keyLabel(KB.act[0]) + '</kbd>, <kbd>' + (PAD_NAMES[PADK.act] || 'A') + '</kbd> on a controller, or tap here to start</div>';
   $('overlay').classList.remove('hide');
   updateHud();
 }
 function startRun() {
-  leaveWorkspace(); settleFloors(); mode = 'play'; loadMap(); setBars(false); buildDrills();
+  leaveWorkspace(); settleFloors(); mode = 'play'; replay = null; $('replayBar').classList.add('hide');
+  WX = WX_SET[$('optWeather').value] || WX_SET.clear; loadMap(); setBars(false); buildDrills();
   $('overlay').classList.add('hide');
   say($('optNoChaser').checked ? 'Exploring: the chaser is switched off' : 'The chaser is hunting for you');
+  recStart(); trainerStart();
 }
 
 function updateHud() {
@@ -3049,7 +3221,7 @@ function draw() {
   ctx.fillStyle = '#0a0d0e'; ctx.fillRect(0, 0, vw, vh);
   // On a map too big to read when fitted to the screen, zoom in and follow the runner during a run.
   const fitS = S, fitOx = ox, fitOy = oy;
-  if ((mode === 'play' || mode === 'over') && S < MIN_TILE) {
+  if ((mode === 'play' || mode === 'over' || mode === 'replay') && S < MIN_TILE) {
     S = MIN_TILE;
     const follow = (pos, lo, hi, view) => (hi - lo) * S <= view ? (view - (hi - lo) * S) / 2 - lo * S
       : Math.max(view - hi * S, Math.min(-lo * S, view / 2 - pos * S));
@@ -3069,7 +3241,7 @@ function draw() {
       if ((x + y) & 1) { ctx.fillStyle = layered ? '#252f33' : '#192124'; ctx.fillRect(x, y, 1, 1); }
       const g = GROUND[i]; if (g) drawGround(g, x, y);
     }
-    if (endStart >= 0 && (mode === 'play' || mode === 'over')) drawCracks();   // the collapse: fiery cracks across the ground
+    if (endStart >= 0 && (mode === 'play' || mode === 'over' || mode === 'replay')) drawCracks();   // the collapse: fiery cracks across the ground
     // leaf piles last, so their rounded edges spill a little over the neighbouring tiles
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (GROUND[y * W + x] === 'l' && !(layered && VOID[y * W + x])) drawLeaves(x, y);
   };
@@ -3078,15 +3250,15 @@ function draw() {
   const noChaser = $('optNoChaser').checked && (mode === 'play' || mode === 'over');
   // Scratch marks. Ones on flat ground go under the walls; ones on a rock hill or staircase are drawn
   // afterwards, on top of it, or the rock would cover them.
-  marks = marks.filter(m => now - m.t < CFG.markLife);
+  if (mode !== 'replay') marks = marks.filter(m => now - m.t < markLifeNow());
   const drawMarks = raised => {
   ctx.lineCap = 'round'; ctx.lineWidth = .055;
   for (const m of marks) {
     if ((m.f || 0) !== vf) continue;
     const mi = Math.floor(m.ry) * W + Math.floor(m.rx);
     if (!!(HILL[mi] || STAIR[mi]) !== raised) continue;
-    const al = 1 - (now - m.t) / CFG.markLife;
-    ctx.strokeStyle = 'rgba(255,122,60,' + (al * .85).toFixed(3) + ')';
+    const al = Math.max(0, 1 - (now - m.t) / markLifeNow());
+    ctx.strokeStyle = 'rgba(' + PAL.mark + ',' + (al * .85).toFixed(3) + ')';
     const ca = Math.cos(m.a), sa = Math.sin(m.a);
     ctx.beginPath();
     for (let i = -1; i <= 1; i++) {
@@ -3098,13 +3270,14 @@ function draw() {
   ctx.lineCap = 'butt';
   };
   const drawMid = () => {
-  drawMarks(false);
-  // the glow that shines ahead of the chaser (walls are drawn over it)
-  if (mode !== 'menu' && mode !== 'edit' && c.state !== 'stun' && !noChaser && c.floor === vf) {
+  drawMarks(false); drawBlood(vf);
+  // the glow that shines ahead of the chaser (walls are drawn over it); a lurker shows none until it is close
+  if (mode !== 'menu' && mode !== 'edit' && c.state !== 'stun' && !noChaser && c.floor === vf &&
+      !(mode === 'play' && CH && CH.type === 'lurker' && Math.hypot(c.x - r.x, c.y - r.y) > 7)) {
     const R = 3.4, half = 0.5;
     const g = ctx.createRadialGradient(c.x, c.y, 0.2, c.x, c.y, R);
-    g.addColorStop(0, 'rgba(226,60,45,.7)'); g.addColorStop(0.6, 'rgba(226,60,45,.3)');
-    g.addColorStop(1, 'rgba(226,60,45,0)');
+    g.addColorStop(0, 'rgba(' + PAL.glow + ',.7)'); g.addColorStop(0.6, 'rgba(' + PAL.glow + ',.3)');
+    g.addColorStop(1, 'rgba(' + PAL.glow + ',0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(c.x, c.y);
     ctx.arc(c.x, c.y, R, c.face - half, c.face + half); ctx.closePath(); ctx.fill();
   }
@@ -3243,7 +3416,7 @@ function draw() {
     ctx.fillStyle = 'rgba(8,11,12,.6)'; ctx.fillRect(0, 0, W, H);
   }
   useFloor(vf);
-  drawBase(vf === 1); drawMid(); drawSolid(vf === 1); drawMarks(true);
+  drawBase(vf === 1); drawMid(); drawSolid(vf === 1); drawMarks(true); drawHeat(vf); drawReplayHits(vf);
 
   if ($('optPath').checked && c.path && mode === 'play') {
     ctx.strokeStyle = 'rgba(226,80,63,.5)'; ctx.lineWidth = .08; ctx.setLineDash([.25, .2]);
@@ -3258,27 +3431,28 @@ function draw() {
   }
 
   // runner
-  const rMoving = mode === 'play' && (r.vault || r.vx || r.vy);
-  const rShown = !r.hidden && r.floor === vf && !(r.taken && r.taken.t > 1.1);   // not drawn while hiding, or while the editor shows the other floor
-  if (rShown) drawPerson(r.x, r.y, r.face, r.r, '#4fd1b5', '#e8c9a0', rMoving ? now * (r.running || r.vault ? 16 : 9) : null, false);
+  const rMoving = (mode === 'play' || mode === 'replay') && (r.vault || r.vx || r.vy);
+  const rShown = !r.hidden && !r.carried && !r.hooked && r.floor === vf && !(r.taken && r.taken.t > 1.1);   // not drawn while hiding, or while the editor shows the other floor
+  if (rShown) drawPerson(r.x, r.y, r.face, r.r, PAL.run, '#e8c9a0', rMoving ? now * (r.running || r.vault ? 16 : 9) : null, false);
   if (r.hp < 2 && rShown) { ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .07; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .08, 0, 7); ctx.stroke(); }
   if (r.boost > 0 && rShown) { ctx.strokeStyle = 'rgba(79,209,181,.5)'; ctx.lineWidth = .05; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .15, 0, 7); ctx.stroke(); }
 
   // chaser: hidden behind walls unless the aid is on
-  const visible = c.sees || mode !== 'play';
+  const visible = mode !== 'play' || c.state === 'carry' || (c.sees && chaserInView(c, r));
   if ((visible || $('optAura').checked) && !noChaser && c.floor === vf) {
     ctx.globalAlpha = visible ? 1 : 0.4;
-    const cMoving = mode === 'play' && (c.state === 'chase' || c.state === 'lunge' || c.state === 'cool' || c.state === 'vault');
-    drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : c.state === 'lunge' ? '#ff6a55' : '#b3261a',
+    const cMoving = (mode === 'play' || mode === 'replay') && (c.state === 'chase' || c.state === 'lunge' || c.state === 'cool' || c.state === 'vault' || c.state === 'carry');
+    drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : (c.state === 'lunge' || c.state === 'windup') ? PAL.lunge : PAL.chase,
                '#2a1513', cMoving ? now * (c.state === 'cool' ? 6 : 16) : null, true, c.state === 'lunge');
-    if (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick' || c.state === 'opengate') {
-      const full = c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : c.state === 'kick' ? CFG.kickTime : c.state === 'opengate' ? CFG.chaserGateTime : CFG.hitCool;
+    if (mode === 'play' && (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick' || c.state === 'opengate' || c.state === 'windup')) {
+      const full = c.state === 'windup' ? 0.55 : c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : c.state === 'kick' ? CFG.kickTime : c.state === 'opengate' ? CFG.chaserGateTime : CFG.hitCool;
       ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .08; ctx.beginPath();
       ctx.arc(c.x, c.y, c.r + .2, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0, Math.min(1, c.t / full))); ctx.stroke();
     }
     ctx.globalAlpha = 1;
   }
-  if (r.taken && mode === 'play') drawClaw(r);
+  drawCarried(vf);
+  if (r.taken && (mode === 'play' || mode === 'replay')) drawClaw(r);
   // bushes and corn go on top so anyone inside looks hidden
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     if (PROP[y * W + x] === 'G') drawProp('G', x, y);
@@ -3348,6 +3522,7 @@ function draw() {
     }
   }
   ctx.restore();
+  drawWeather();
 
   // floating labels + prompt (screen space)
   ctx.textAlign = 'center'; ctx.font = '600 ' + Math.max(11, S * .5) + 'px "Segoe UI", system-ui, sans-serif';
@@ -3356,14 +3531,17 @@ function draw() {
     ctx.fillText(f.text, ox + f.x * S, oy + (f.y - f.t * .9) * S);
   }
   ctx.globalAlpha = 1;
-  if (mode === 'play' && r.hidden) {
+  if (mode === 'play' && r.carried) {
+    ctx.fillStyle = '#f0b648';
+    ctx.fillText('MASH ' + (lastSrc === 'pad' ? (PAD_NAMES[PADK.act] || 'A') : lastSrc === 'touch' ? 'ACTION' : keyLabel(KB.act[0]).toUpperCase()) + ' to wriggle free', ox + r.x * S, oy + (r.y - 1.4) * S);
+  } else if (mode === 'play' && r.hidden) {
     ctx.fillStyle = '#d9e2e0';
-    ctx.fillText((lastSrc === 'pad' ? 'A' : lastSrc === 'touch' ? 'ACTION' : 'SPACE') + ': get out', ox + (r.hidden.x + .5) * S, oy + (r.hidden.y - .25) * S);
+    ctx.fillText((lastSrc === 'pad' ? 'A' : lastSrc === 'touch' ? 'ACTION' : keyLabel(KB.act[0]).toUpperCase()) + ': get out', ox + (r.hidden.x + .5) * S, oy + (r.hidden.y - .25) * S);
   } else if (mode === 'play' && !r.vault) {
     const [dx, dy] = inputDir(), a = nearestAction(dx, dy);
     if (a) {
       ctx.fillStyle = a.kind === 'jam' ? '#e2503f' : '#d9e2e0';
-      const btn = lastSrc === 'pad' ? 'A' : lastSrc === 'touch' ? 'ACTION' : 'SPACE';
+      const btn = lastSrc === 'pad' ? 'A' : lastSrc === 'touch' ? 'ACTION' : keyLabel(KB.act[0]).toUpperCase();
       ctx.fillText(a.kind === 'drop' ? btn + ': drop' : a.kind === 'jam' ? 'jammed'
                    : a.kind === 'gate' ? 'hold ' + btn + ': open gate ' + Math.floor(100 * a.s.prog / CFG.gateTime) + '%'
                    : a.kind === 'locker' ? btn + ': hide'
@@ -3384,6 +3562,7 @@ function draw() {
       ctx.fillStyle = '#4fd1b5'; ctx.fillText('EXIT', Math.max(40, Math.min(vw - 40, ax - Math.cos(an) * 34)), Math.max(24, Math.min(vh - 14, ay - Math.sin(an) * 34 + 5)));
     }
   }
+  drawMinimap(fitS);
   if (flash > 0) { ctx.fillStyle = 'rgba(226,60,45,' + (flash * .35) + ')'; ctx.fillRect(0, 0, vw, vh); }
   S = fitS; ox = fitOx; oy = fitOy;   // the editor and menu always use the whole-map fit
 }
@@ -3395,6 +3574,7 @@ function frame(t) {
   sndTick();
   $('touch').classList.toggle('hide', !(touchSeen && mode === 'play'));
   if (mode === 'play') { update(dt / 2); if (mode === 'play') update(dt / 2); }
+  else if (mode === 'replay') replayStep(dt);
   for (const f of floaters) f.t += dt; floaters = floaters.filter(f => f.t < 1.1);
   if (flash > 0) flash -= dt * 2;
   if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').textContent = ''; }
@@ -3410,9 +3590,11 @@ function buildDrills() {
       '<span class="best">' + (b ? b.toFixed(1) + 's' : '') + '</span><b>' + esc(m.name) +
       (m.custom ? '<span class="tag">custom</span>' : '') + '</b><small>' + m.desc + '</small></button>';
   }).join('');
-  $('drillBtns').innerHTML = '<button data-a="new">+ New drill</button><button data-a="random">Random map</button>' + (MAPS[mapIdx].custom
+  $('drillBtns').innerHTML = '<button data-a="new">+ New drill</button><button data-a="random">Random map</button><button data-a="daily">Daily map</button>' + (MAPS[mapIdx].custom
     ? '<button data-a="edit">Edit</button><button data-a="del">' + (delArmed ? 'Really delete?' : 'Delete') + '</button>'
-    : '<button data-a="copy">Copy &amp; edit</button>');
+    : '<button data-a="copy">Copy &amp; edit</button>') +
+    '<button data-a="prog">Progress</button>' + (MAPS[mapIdx].custom ? '<button data-a="share">Share code</button>' : '') + '<button data-a="code">Load code</button>';
+  $('adaptLvl').textContent = $('optAdapt').checked ? '(level ' + adaptLevel() + ')' : '';
   for (const b of document.querySelectorAll('#diff button')) b.classList.toggle('on', b.dataset.d === diffKey);
 }
 $('drills').addEventListener('click', e => {
@@ -3425,6 +3607,10 @@ $('drillBtns').addEventListener('click', e => {
   const a = b.dataset.a;
   if (a === 'new') newDrill(false);
   else if (a === 'random') randomDrill();
+  else if (a === 'daily') dailyMap();
+  else if (a === 'prog') showProgress();
+  else if (a === 'share') shareCode();
+  else if (a === 'code') { const box = $('codeBox'); box.classList.toggle('hide'); $('codeGo').textContent = 'Add this drill'; if (!box.classList.contains('hide')) { $('codeIn').value = ''; $('codeIn').focus(); } }
   else if (a === 'copy') newDrill(true);
   else if (a === 'edit') enterEdit();
   else if (a === 'del') {
@@ -3538,7 +3724,7 @@ $('edDone').addEventListener('click', () => { buildDrills(); showMenu(); });
 // pointer events cover mouse, pen and touch, so the editor works on a touchscreen too
 cv.addEventListener('pointerdown', e => {
   if (mode !== 'edit') return;
-  e.preventDefault();
+  e.preventDefault(); edStroke = ++edStrokeN; symLast = {};
   const p = cellFromEvent(e);
   if (tool === 'outline') { if (p && e.button !== 2) { painting = 3; outStarts.push(outCells.length); outCells.push(p); outStrokes++; } return; }   // each press starts a new stroke
   if (tool === 'select') {
@@ -3548,10 +3734,10 @@ cv.addEventListener('pointerdown', e => {
     }
     return;
   }
-  if (tool === 'stamp' && e.button !== 2) { placeStamp(e); return; }
+  if (tool === 'stamp' && e.button !== 2) { placeStamp(e); symStamp(e, p); return; }
   if (tool === 'rail') { toggleRail(e, e.button === 2); return; }
   if (tool.startsWith('obj:')) { placeObj(e, e.button === 2); return; }
-  painting = e.button === 2 ? 2 : 1; lastPaint = null; paintAt(e, painting === 2);
+  painting = e.button === 2 ? 2 : 1; lastPaint = null; paintAt(e, painting === 2); symPaint(e, painting === 2, p);
 });
 cv.addEventListener('pointermove', e => {
   if (mode !== 'edit') return;
@@ -3562,12 +3748,12 @@ cv.addEventListener('pointermove', e => {
     if (p) sel = [Math.min(selA[0], p[0]), Math.min(selA[1], p[1]), Math.max(selA[0], p[0]), Math.max(selA[1], p[1])];
   }
   else if (painting === 5) { hover = p; if (p) moveD = [p[0] - selA[0], p[1] - selA[1]]; }
-  else if (painting) paintAt(e, painting === 2); else hover = p;
+  else if (painting) { paintAt(e, painting === 2); symPaint(e, painting === 2, p); } else hover = p;
 });
 cv.addEventListener('pointerleave', () => { hover = null; });
 cv.addEventListener('contextmenu', e => { if (mode === 'edit') e.preventDefault(); });
 const endDrag = () => {
-  const was = painting; painting = 0;
+  const was = painting; painting = 0; edStroke = 0;
   if (mode !== 'edit') return;
   if (was === 3) edMsg('Keep drawing to add to the outline, or press Save outline to apply it. Clear outline starts again.');
   if (was === 4 && sel) finishSelect();
@@ -3698,7 +3884,7 @@ $('dataFile').addEventListener('change', e => {
   rd.onerror = () => dataMsg('Couldn\'t read that file.');
   rd.readAsText(f);
 });
-$('overlay').addEventListener('click', () => { if (mode === 'menu' || mode === 'over') startRun(); });
+$('overlay').addEventListener('click', e => { if (e.target.closest('[data-stay]')) return; if (mode === 'menu' || mode === 'over') startRun(); });
 $('menuBtn').addEventListener('click', () => { document.querySelector('aside').classList.toggle('open'); });
 addEventListener('gamepadconnected', () => { if (mode !== 'edit') say('Controller connected'); });
 $('diff').addEventListener('click', e => {
@@ -3714,9 +3900,11 @@ $('optShiftRun').addEventListener('change', e => { store('lt_optShiftRun', e.tar
 const GAME_KEYS = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD'];
 addEventListener('keydown', e => {
   // typing in a name or size box must never be swallowed by the game keys
-  if (e.target.tagName === 'INPUT' && ['text', 'number', 'password'].includes(e.target.type)) return;
-  if (GAME_KEYS.includes(e.code)) e.preventDefault();
+  if ((e.target.tagName === 'INPUT' && ['text', 'number', 'password'].includes(e.target.type)) || e.target.tagName === 'TEXTAREA') return;
+  if (kbCapture) { e.preventDefault(); if (e.code !== 'Escape') setKey(kbCapture, e.code); kbCapture = null; buildKeyList(); return; }
+  if (GAME_KEYS.includes(e.code) || allKbCodes().includes(e.code)) e.preventDefault();
   if (mode === 'edit') {
+    if ((e.ctrlKey || e.metaKey) && edKey(e)) { e.preventDefault(); return; }
     const b = document.querySelectorAll('#tools button')[parseInt(e.key, 10) - 1];
     if (b) b.click();
     if (e.code === 'KeyR') doRotate();
@@ -3725,9 +3913,11 @@ addEventListener('keydown', e => {
     if (mv) moveSelection(mv[0], mv[1]);
     return;
   }
+  if (mode === 'replay') { replayKey(e); return; }
   if (e.repeat) return;
-  if (e.code === 'KeyR') { startRun(); return; }
-  if (e.code === 'Space') { if (mode !== 'play') { startRun(); return; } spacePressed = true; }
+  if (kbIs('restart', e.code)) { startRun(); return; }
+  if (e.code === 'KeyP' && mode === 'over' && lastRec) { startReplay(); return; }
+  if (kbIs('act', e.code)) { if (mode !== 'play') { startRun(); return; } spacePressed = true; }
   keys.add(e.code);
 });
 addEventListener('keyup', e => keys.delete(e.code));
@@ -3735,6 +3925,790 @@ addEventListener('blur', () => keys.clear());
 addEventListener('resize', resize);
 // the editor bar grows and shrinks as its message changes; keep the canvas matched to the space it has
 if (window.ResizeObserver) new ResizeObserver(() => resize()).observe($('wrap'));
+
+/* ---------- Extras: colours, keys, vibration, weather, chaser types, recording and replay, coaching,
+   progress, timing drills, hooks and injuries, daily maps and share codes, editor undo / copy / symmetry, minimap ---------- */
+
+// Colours. The colourblind set swaps teal and red for blue and orange, which stay apart for the common kinds of colour blindness.
+const PAL_STD = { run: '#4fd1b5', chase: '#b3261a', lunge: '#ff6a55', glow: '226,60,45', mark: '255,122,60', name: 'teal' };
+const PAL_CB = { run: '#3d8bff', chase: '#e07b00', lunge: '#ffc247', glow: '230,130,20', mark: '210,100,255', name: 'blue' };
+const PAL = Object.assign({}, PAL_STD);
+function setPalette() {
+  const cb = $('optCB').checked;
+  Object.assign(PAL, cb ? PAL_CB : PAL_STD);
+  document.documentElement.style.setProperty('--teal', PAL.run);
+  document.documentElement.style.setProperty('--red', cb ? PAL.chase : '#e2503f');
+}
+
+// Keys. Each action has a main key you can change, plus fixed extras (the arrow keys still move you).
+const KB_DEF = { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
+                 run: ['ShiftLeft', 'ShiftRight'], act: ['Space'], restart: ['KeyR'] };
+const KB_NAME = { up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', run: 'Run / walk', act: 'Vault (hold) / drop / action', restart: 'Restart' };
+let KB = JSON.parse(JSON.stringify(KB_DEF)), kbCapture = null, padCapture = null;
+const PADK = { act: 0, restart: 3 };
+const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'L-stick', 'R-stick', 'Up', 'Down', 'Left', 'Right'];
+try { const s = JSON.parse(store('lt_keys') || 'null'); if (s) for (const a in KB_DEF) if (Array.isArray(s[a]) && s[a].length && s[a].every(k => typeof k === 'string')) KB[a] = s[a]; } catch (e) {}
+try { const s = JSON.parse(store('lt_padkeys') || 'null'); if (s) for (const a in PADK) if (Number.isInteger(s[a]) && s[a] >= 0 && s[a] < 32) PADK[a] = s[a]; } catch (e) {}
+const kbHas = a => KB[a].some(k => keys.has(k));
+const kbIs = (a, code) => KB[a].includes(code);
+const allKbCodes = () => Object.values(KB).flat();
+function keyLabel(code) {
+  if (!code) return '?';
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  return { Space: 'Space', ShiftLeft: 'Shift', ShiftRight: 'R-Shift', ControlLeft: 'Ctrl', ControlRight: 'R-Ctrl', AltLeft: 'Alt', AltRight: 'R-Alt',
+           ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Enter: 'Enter', Tab: 'Tab', CapsLock: 'Caps', Backspace: 'Bksp' }[code] || code.replace(/^Numpad/, 'Num ');
+}
+function setKey(a, code) {
+  const old = KB[a][0];
+  for (const b in KB) if (b !== a) { const i = KB[b].indexOf(code); if (i >= 0) KB[b][i] = old; }   // a key does one thing: the two swap
+  KB[a][0] = code; KB[a] = KB[a].filter((k, i) => i === 0 || k !== code);
+  store('lt_keys', JSON.stringify(KB));
+}
+function buildKeyList() {
+  $('keyList').innerHTML = Object.keys(KB_NAME).map(a => '<li><span>' + KB_NAME[a] + '</span><button class="kb' + (kbCapture === a ? ' wait' : '') + '" data-k="' + a + '">' +
+    (kbCapture === a ? 'press a key…' : esc(keyLabel(KB[a][0]))) + '</button></li>').join('');
+  $('padList').innerHTML = [['act', 'Controller: vault / drop / action'], ['restart', 'Controller: restart (Menu also works)']].map(([a, n]) =>
+    '<li><span>' + n + '</span><button class="kb' + (padCapture === a ? ' wait' : '') + '" data-p="' + a + '">' +
+    (padCapture === a ? 'press a button…' : (PAD_NAMES[PADK[a]] || 'button ' + PADK[a])) + '</button></li>').join('');
+}
+
+// A short buzz on a phone, or a rumble on a controller that supports it.
+function buzz(ms, strong) {
+  if (!$('optVib').checked) return;
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
+  try {
+    for (const gp of navigator.getGamepads ? navigator.getGamepads() : [])
+      if (gp && gp.vibrationActuator && gp.vibrationActuator.playEffect)
+        gp.vibrationActuator.playEffect('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: strong * 0.7 }).catch(() => {});
+  } catch (e) {}
+}
+
+// Weather, chosen at the start of each run. view: how far you can see in fog or at night (0 = no limit).
+const WX_SET = {
+  clear: { name: 'clear', mark: 1, hear: 1, sight: 26, markSee: 10, view: 0 },
+  rain:  { name: 'rain', mark: 0.5, hear: 0.6, sight: 22, markSee: 8, view: 0 },
+  fog:   { name: 'fog', mark: 1, hear: 1, sight: 11, markSee: 6, view: 7.5 },
+  night: { name: 'night', mark: 1, hear: 1, sight: 15, markSee: 6, view: 6 },
+};
+let WX = WX_SET.clear;
+const markLifeNow = () => CFG.markLife * WX.mark;
+const bloodLifeNow = () => CFG.bloodLife * WX.mark;
+
+// The chaser for this run: the difficulty, changed by its type and (if on) the adaptive level.
+let CH = null;
+const adaptLevel = () => Math.max(0, Math.min(10, parseInt(store('lt_adapt_' + diffKey), 10) || 0));
+function chaserProfile() {
+  const D = Object.assign({}, DIFF[diffKey]), type = $('optType').value, L = $('optAdapt').checked ? adaptLevel() : 0;
+  D.type = type; D.bait = diffKey === 'easy' ? 0 : diffKey === 'normal' ? 0.3 : 0.55;
+  if (type === 'sprinter') { D.speed += 0.45; D.turn *= 0.5; D.slack += 0.25; }
+  else if (type === 'charger') D.speed -= 0.3;
+  else if (type === 'lurker') D.speed -= 0.1;
+  D.speed += L * 0.03; D.turn += L * 0.4; D.trig += L * 0.015; D.fake = Math.min(0.8, D.fake + L * 0.03); D.bait = Math.min(0.8, D.bait + L * 0.03);
+  return D;
+}
+function adaptUpdate(t, escaped) {
+  if (!$('optAdapt').checked || $('optNoChaser').checked || trainer) return '';
+  const was = adaptLevel(), lv = escaped || t >= 60 ? Math.min(10, was + 1) : t < 20 ? Math.max(0, was - 1) : was;
+  store('lt_adapt_' + diffKey, String(lv));
+  return lv > was ? 'Adaptive: the chaser steps up to level ' + lv + '.' : lv < was ? 'Adaptive: the chaser eases off to level ' + lv + '.' : 'Adaptive: the chaser stays at level ' + lv + '.';
+}
+// Whether you can see the chaser right now: a lurker only shows up close, and fog or night limit everyone.
+function chaserInView(c, r) {
+  const d = Math.hypot(c.x - r.x, c.y - r.y);
+  if (CH && CH.type === 'lurker' && d > 7) return false;
+  if (WX.view && d > WX.view + 0.5) return false;
+  return true;
+}
+
+// A seeded random number generator swapped in for Math.random while fn runs, so the same seed gives the same result.
+function withSeed(seed, fn) {
+  const orig = Math.random; let a = seed >>> 0;
+  Math.random = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  try { return fn(); } finally { Math.random = orig; }
+}
+
+/* ----- Recording and replay. Positions are kept 20 times a second; pallets, gates and the rest as changes. ----- */
+let rec = null, lastRec = null, replay = null, lastCard = '';
+function recStart() {
+  const sp = allSpecials();
+  rec = { map: mapIdx, id: MAPS[mapIdx].id, frames: [], marks: [], blood: [], ev: [], objs: sp.slice(), last: sp.map(s => s.state), next: 0, endStart: -1, wx: WX.name };
+}
+function recTick(force) {
+  if (!rec || (!force && now < rec.next)) return;
+  rec.next = now + 0.05;
+  const r = runner, c = chaser;
+  rec.frames.push([now, r.x, r.y, r.face, r.floor, r.hidden ? 1 : 0, c.x, c.y, c.face, c.floor, c.state, r.hp, r.carried ? 1 : r.hooked ? 2 : 0]);
+  const sp = allSpecials();
+  if (sp.length !== rec.objs.length) for (const s of sp) if (!rec.objs.includes(s)) { rec.objs.push(s); rec.last.push(s.state); }
+  for (let i = 0; i < rec.objs.length; i++) { const s = rec.objs[i]; if (s.state !== rec.last[i]) { rec.ev.push({ t: now, k: 'st', i, v: s.state }); rec.last[i] = s.state; } }
+  if (rec.frames.length > 36000) rec = null;   // over half an hour: stop recording
+}
+function recEnd() {
+  if (rec && rec.frames.length > 1) { recTick(true); rec.objs = null; lastRec = rec; }
+  rec = null;
+}
+function startReplay() {
+  const R = lastRec;
+  if (!R || R.map >= MAPS.length || MAPS[R.map].id !== R.id) { say('No replay for this drill'); return; }
+  mapIdx = R.map; leaveWorkspace(); settleFloors(); mode = 'replay'; WX = WX_SET[R.wx] || WX_SET.clear;
+  loadMap(); setBars(false);
+  replay = { t: 0, speed: 1, playing: true, len: R.frames[R.frames.length - 1][0], fi: 0, ei: 0, objs: allSpecials().slice(), applied: 0 };
+  $('overlay').classList.add('hide'); $('replayBar').classList.remove('hide');
+  $('rpTicks').innerHTML = R.ev.filter(e => e.k === 'hit').map(e => '<i style="left:' + (100 * e.t / Math.max(0.01, replay.len)).toFixed(2) + '%"></i>').join('');
+  replaySeek(0); syncReplayBar();
+}
+function replaySeek(t) {   // going backwards rebuilds the map from the start and runs the changes up to the new time
+  replay.t = Math.max(0, Math.min(replay.len, t));
+  if (replay.t < replay.applied) { loadMap(); replay.objs = allSpecials().slice(); replay.ei = 0; replay.fi = 0; floaters = []; }
+  replayEvents(false); replayPose();
+}
+function replayEvents(show) {
+  const R = lastRec;
+  while (replay.ei < R.ev.length && R.ev[replay.ei].t <= replay.t) {
+    const e = R.ev[replay.ei++];
+    if (e.k === 'st') { const s = replay.objs[e.i]; if (s) s.state = e.v; }
+    else if (e.k === 'gate') { withSeed(e.seed, spawnExitGate); for (const s of allSpecials()) if (!replay.objs.includes(s)) replay.objs.push(s); }
+    else if (show && e.k === 'hit') { floatText(e.x, e.y - .7, 'HIT', '#e2503f'); flash = 1; }
+    else if (show && e.k === 'fx') floatText(e.x, e.y, e.txt, e.col);
+  }
+  replay.applied = replay.t;
+}
+function replayPose() {
+  const R = lastRec, F = R.frames, t = replay.t;
+  let i = replay.fi; if (i >= F.length || F[i][0] > t) i = 0;
+  while (i < F.length - 2 && F[i + 1][0] <= t) i++;
+  replay.fi = i;
+  const a = F[i], b = F[Math.min(F.length - 1, i + 1)], k = b[0] > a[0] ? Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0]))) : 0;
+  const L = (p, q) => p + (q - p) * k;
+  const LA = (p, q) => { let d = q - p; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return p + d * k; };
+  const r = runner, c = chaser, px = r.x, py = r.y;
+  r.x = L(a[1], b[1]); r.y = L(a[2], b[2]); r.face = LA(a[3], b[3]); r.floor = a[4]; r.hidden = a[5] ? true : null;
+  c.x = L(a[6], b[6]); c.y = L(a[7], b[7]); c.face = LA(a[8], b[8]); c.floor = a[9]; c.state = a[10]; c.sees = true;
+  r.hp = a[11]; r.carried = a[12] === 1 ? { s: 0 } : null; r.hooked = a[12] === 2 ? { t: 1 } : null;
+  r.vx = (r.x - px) * 60; r.vy = (r.y - py) * 60; r.running = true;
+  now = t; endStart = R.endStart >= 0 && t >= R.endStart ? R.endStart : -1;
+  const ml = markLifeNow(), bl = bloodLifeNow();
+  marks = R.marks.filter(m => m.t <= t && t - m.t < ml);
+  blood = R.blood.filter(m => m.t <= t && t - m.t < bl);
+  const claw = R.ev.find(e => e.k === 'claw'); r.taken = claw && t >= claw.t ? { t: t - claw.t, clashed: true } : null;
+  useFloor(r.floor);
+}
+function replayStep(dt) {
+  if (!replay || !replay.playing) return;
+  replay.t = Math.min(replay.len, replay.t + dt * replay.speed);
+  replayEvents(true); replayPose();
+  if (replay.t >= replay.len) replay.playing = false;
+  syncReplayBar();
+}
+function syncReplayBar() {
+  if (!replay) return;
+  $('rpPlay').textContent = replay.playing ? 'Pause' : replay.t >= replay.len ? 'Again' : 'Play';
+  $('rpSeek').value = Math.round(1000 * replay.t / Math.max(0.01, replay.len));
+  $('rpTime').textContent = replay.t.toFixed(1) + ' / ' + replay.len.toFixed(1) + ' s';
+  for (const b of document.querySelectorAll('#replayBar [data-sp]')) b.classList.toggle('on', +b.dataset.sp === replay.speed);
+}
+function replayToggle() { if (replay.t >= replay.len) replaySeek(0); replay.playing = !replay.playing; syncReplayBar(); }
+function exitReplay() {
+  $('replayBar').classList.add('hide'); replay = null; mode = 'over';
+  $('card').innerHTML = lastCard; $('overlay').classList.remove('hide');
+}
+function replayKey(e) {
+  if (e.code === 'Escape' || e.code === 'KeyP') { exitReplay(); return; }
+  if (kbIs('restart', e.code)) { startRun(); return; }
+  if (e.repeat) return;
+  if (e.code === 'Space' || kbIs('act', e.code)) { replayToggle(); return; }
+  if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') { replay.playing = false; replaySeek(replay.t + (e.code === 'ArrowLeft' ? -2 : 2)); syncReplayBar(); return; }
+  const sp = { Digit1: 0.25, Digit2: 0.5, Digit3: 1, Digit4: 2 }[e.code]; if (sp) { replay.speed = sp; syncReplayBar(); }
+}
+function drawReplayHits(vf) {   // a red cross wherever you were hit, once the replay has reached it
+  if (mode !== 'replay' || !lastRec) return;
+  ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .1; ctx.beginPath();
+  for (const e of lastRec.ev) if (e.k === 'hit' && e.t <= replay.t && (e.f || 0) === vf) {
+    ctx.moveTo(e.x - .3, e.y - .3); ctx.lineTo(e.x + .3, e.y + .3); ctx.moveTo(e.x + .3, e.y - .3); ctx.lineTo(e.x - .3, e.y + .3);
+  }
+  ctx.stroke();
+}
+
+/* ----- Where you get hit, kept per drill (in drill tiles, so it lines up in the editor too). ----- */
+const hitKey = () => 'lt_hits_' + MAPS[mapIdx].id;
+let heatCache = null;
+function saveHit(r) {
+  let a = []; try { a = JSON.parse(store(hitKey()) || '[]'); } catch (e) {}
+  if (!Array.isArray(a)) a = [];
+  a.push([+(r.x - 1 - mapPad).toFixed(1), +(r.y - 1 - mapPad).toFixed(1), r.floor]);
+  store(hitKey(), JSON.stringify(a.slice(-300))); heatCache = null;
+}
+function drawHeat(vf) {
+  if (!$('optHeat').checked || mode === 'replay') return;
+  if (!heatCache || heatCache.key !== hitKey()) {
+    let a = []; try { a = JSON.parse(store(hitKey()) || '[]'); } catch (e) {}
+    heatCache = { key: hitKey(), a: Array.isArray(a) ? a : [] };
+  }
+  const off = 1 + (mode === 'edit' ? 0 : mapPad);
+  for (const [x, y, f] of heatCache.a) {
+    if ((f || 0) !== vf) continue;
+    const g = ctx.createRadialGradient(x + off, y + off, 0, x + off, y + off, 1.6);
+    g.addColorStop(0, 'rgba(255,40,40,.34)'); g.addColorStop(1, 'rgba(255,40,40,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x + off, y + off, 1.6, 0, 7); ctx.fill();
+  }
+}
+
+/* ----- Coaching on each drop and vault ----- */
+function judgeDrop(s, stunned, wasBait) {
+  const c = chaser, live = !$('optNoChaser').checked && c.floor === runner.floor && (c.inChase || trainer);
+  if (!live) return;
+  const dp = Math.hypot(c.x - s.x - .5, c.y - s.y - .5), wait = Math.max(0, (dp - 1.6) / (CH || DIFF[diffKey]).speed);
+  let v, txt, col;
+  if (stunned) { v = 'stun'; txt = 'perfect drop'; col = '#f0b648'; }
+  else if (dp <= 2.6) { v = 'good'; txt = 'good drop'; col = PAL.run; }
+  else if (wasBait) { v = 'baited'; txt = 'baited! ' + wait.toFixed(1) + ' s early'; col = '#e2503f'; }
+  else { v = 'early'; txt = wait.toFixed(1) + ' s early'; col = '#e2503f'; }
+  stats.dropLog.push({ v, w: v === 'early' || v === 'baited' ? wait : 0 });
+  if (rec) rec.ev.push({ t: now, k: 'fx', x: runner.x, y: runner.y - 1.2, txt, col });
+  if ($('optCoach').checked && !trainer) floatText(runner.x, runner.y - 1.2, txt, col);
+  if (trainer && trainer.kind === 'pallet')
+    trainerResult(v === 'stun' ? 'perfect' : v === 'good' ? 'good' : 'early',
+      v === 'stun' ? 'Perfect: stunned it!' : v === 'good' ? 'Good: safe, but no stun. A touch later stuns it' : (v === 'baited' ? 'Baited: it stopped short and you dropped ' : 'Too early: you dropped ') + wait.toFixed(1) + ' s before it got there', col);
+}
+function judgeVault(fast) {
+  const c = chaser, r = runner, live = !$('optNoChaser').checked && c.floor === r.floor && (c.inChase || trainer);
+  const e = { fast, v: 'clear', m: 99, hit: false };
+  if (live && r.vault) {
+    const need = (CH || DIFF[diffKey]).speed * r.vault.dur * 0.55 + CFG.hitRange + 0.9;
+    e.m = Math.hypot(c.x - r.x, c.y - r.y) - need;
+    e.v = e.m > 1.5 ? 'safe' : e.m > 0 ? 'tight' : 'risky';
+    const txt = e.v === 'risky' ? 'risky!' : e.v, col = e.v === 'safe' ? PAL.run : e.v === 'tight' ? '#f0b648' : '#e2503f';
+    if ($('optCoach').checked && !trainer) floatText(r.x, r.y - 1.1, txt, col);
+    if (rec) rec.ev.push({ t: now, k: 'fx', x: r.x, y: r.y - 1.1, txt, col });
+  }
+  stats.vaultLog.push(e);
+  if (trainer && trainer.kind === 'window') trainer.vault = e;
+}
+// Loops: time spent in chase around one pallet or window. Each stretch of 4 s or more counts.
+function closeLoop() {
+  if (!stats) return;
+  if (stats.anchor && stats.anchorT >= 4) stats.loops.push({ t: stats.anchorT, kind: stats.anchor.type });
+  stats.anchor = null; stats.anchorT = 0;
+}
+function extrasTick(dt) {
+  if (trainer && trainer.resetAt >= 0 && now >= trainer.resetAt) {
+    if (trainer.round >= trainer.rounds) { endRun('trainer'); return; }
+    trainerRound();
+  }
+  const c = chaser, r = runner;
+  if (c.inChase && !$('optNoChaser').checked) {
+    let A = null, bd = 6;
+    for (const s of specials) {
+      if (!((s.type === 'pallet' && s.state === 'up') || s.type === 'window')) continue;
+      const d = Math.hypot(s.x + .5 - r.x, s.y + .5 - r.y); if (d < bd) { bd = d; A = s; }
+    }
+    if (A && A === stats.anchor) stats.anchorT += dt;
+    else { closeLoop(); stats.anchor = A; }
+  } else closeLoop();
+}
+function breakdownHTML() {
+  const out = [], dl = stats.dropLog, vl = stats.vaultLog, lp = stats.loops;
+  if (dl.length) {
+    const n = v => dl.filter(d => d.v === v).length, wasted = dl.reduce((a, d) => a + (d.w || 0), 0), early = n('early') + n('baited'), parts = [];
+    if (n('stun')) parts.push(n('stun') + ' stun' + (n('stun') > 1 ? 's' : ''));
+    if (n('good')) parts.push(n('good') + ' well timed');
+    if (early) parts.push(early + ' early (about ' + wasted.toFixed(1) + ' s given away' + (n('baited') ? ', ' + n('baited') + ' baited' : '') + ')');
+    if (n('late')) parts.push(n('late') + ' too late (hit beside a standing pallet)');
+    out.push('<div><b>Pallets:</b> ' + parts.join(' · ') + '</div>');
+  }
+  if (vl.length) {
+    const n = v => vl.filter(d => d.v === v).length, hits = vl.filter(d => d.hit).length, fast = vl.filter(d => d.fast).length;
+    const kinds = [n('safe') && n('safe') + ' safe', n('tight') && n('tight') + ' tight', n('risky') && n('risky') + ' risky'].filter(Boolean).join(', ');
+    out.push('<div><b>Vaults:</b> ' + vl.length + ' (' + fast + ' fast)' + (kinds ? ' · ' + kinds : '') + (hits ? ' · hit during ' + hits : '') + '</div>');
+  }
+  if (lp.length) {
+    const best = lp.reduce((a, b) => b.t > a.t ? b : a);
+    out.push('<div><b>Loops held:</b> ' + lp.length + ' · longest ' + best.t.toFixed(0) + ' s at a ' + best.kind + ' · average ' + (lp.reduce((a, b) => a + b.t, 0) / lp.length).toFixed(0) + ' s</div>');
+  }
+  out.push('<div><b>Line of sight broken:</b> ' + stats.losBreaks + ' time' + (stats.losBreaks === 1 ? '' : 's') + ' · <b>closest it got:</b> ' + (stats.closest < 99 ? stats.closest.toFixed(1) + ' m' : '–') + '</div>');
+  if (stats.wriggles) out.push('<div><b>Wriggled free:</b> ' + stats.wriggles + '</div>');
+  return '<div class="bd">' + out.join('') + '</div>';
+}
+function cardButtons() {
+  return '<div class="btns" data-stay><button class="primary" data-act="again">Run it again</button>' +
+    (lastRec ? '<button data-act="replay">Watch replay (P)</button>' : '') + '</div>' +
+    '<div class="go">Press <kbd>' + keyLabel(KB.act[0]) + '</kbd> or <kbd>' + keyLabel(KB.restart[0]) + '</kbd>, <kbd>' + (PAD_NAMES[PADK.act] || 'A') + '</kbd> on a controller, or tap here to run it again</div>';
+}
+function menuExtras() {
+  const m = MAPS[mapIdx], bits = [];
+  if (m.trainer === 'pallet') bits.push('Timing drill, 10 rounds. Run through the gap, wait beside the pallet and drop it at the last moment: as the chaser reaches it, not before. Each round is graded.');
+  if (m.trainer === 'window') bits.push('Timing drill, 10 rounds. The chaser starts a different distance behind you each round. Run straight at the window and vault: each vault is graded safe, tight or too close, so you learn how much gap a vault needs.');
+  if (/^daily-/.test(m.id || '')) bits.push('Today\'s daily map: the same for everyone today. Your best time here is kept for the day.');
+  const type = $('optType').value;
+  if (type !== 'standard' || $('optAdapt').checked || $('optWeather').value !== 'clear')
+    bits.push('This run: ' + [$('optType').selectedOptions[0].textContent, $('optAdapt').checked ? 'adaptive level ' + adaptLevel() : '', $('optWeather').value !== 'clear' ? $('optWeather').selectedOptions[0].textContent.split(':')[0].toLowerCase() : ''].filter(Boolean).join(' · ') + '.');
+  return bits.map(b => '<div class="coach">' + b + '</div>').join('');
+}
+
+/* ----- Progress: your last 60 runs on each drill and difficulty ----- */
+const histKey = (m, d) => 'lt_hist_' + MAPS[m].id + '_' + d;
+function getHist(m, d) { try { const a = JSON.parse(store(histKey(m, d)) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function pushHistory(t, escaped) {
+  if (trainer || $('optNoChaser').checked) return getHist(mapIdx, diffKey);
+  const a = getHist(mapIdx, diffKey).concat([[Date.now(), +t.toFixed(1), escaped ? 1 : 0]]).slice(-60);
+  store(histKey(mapIdx, diffKey), JSON.stringify(a)); return a;
+}
+function sparkline(vals, w, h) {
+  if (vals.length < 2) return '';
+  const max = Math.max(...vals, 1), step = w / (vals.length - 1), Y = v => (h - 3 - (v / max) * (h - 6)).toFixed(1);
+  const pts = vals.map((v, i) => (i * step).toFixed(1) + ',' + Y(v));
+  const avg = vals.map((_, i) => { const s = vals.slice(Math.max(0, i - 4), i + 1); return s.reduce((a, b) => a + b, 0) / s.length; });
+  const apts = avg.map((v, i) => (i * step).toFixed(1) + ',' + Y(v));
+  return '<svg class="spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="width:100%;height:' + h + 'px">' +
+    '<polyline fill="none" stroke="#4a5a5f" stroke-width="1.5" vector-effect="non-scaling-stroke" points="' + pts.join(' ') + '"/>' +
+    '<polyline fill="none" stroke="' + PAL.run + '" stroke-width="2.5" vector-effect="non-scaling-stroke" points="' + apts.join(' ') + '"/></svg>';
+}
+function progressLine(hist) {
+  if (!hist || hist.length < 2) return '';
+  const v = hist.slice(-30).map(x => x[1]), last5 = v.slice(-5), prev5 = v.slice(-10, -5), avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const trend = prev5.length ? avg(last5) - avg(prev5) : 0;
+  return '<div class="bd"><b>Your last ' + v.length + ' runs here</b> (grey: each run, ' + PAL.name + ': 5-run average)' + sparkline(v, 440, 54) +
+    (prev5.length ? '<div>Average of your last 5: <b>' + avg(last5).toFixed(1) + ' s</b> (' + (trend >= 0 ? '+' : '') + trend.toFixed(1) + ' s on the 5 before)</div>' : '') + '</div>';
+}
+function showProgress() {
+  showMenu();
+  const rows = [];
+  MAPS.forEach((m, i) => {
+    for (const d of ['easy', 'normal', 'hard']) {
+      const h = getHist(i, d); if (!h.length) continue;
+      const v = h.map(x => x[1]);
+      rows.push('<div class="row"><div><b>' + esc(m.name) + '</b><small>' + d + ' · ' + h.length + ' run' + (h.length === 1 ? '' : 's') + ' · best ' + Math.max(...v).toFixed(1) +
+        ' s · last ' + v[v.length - 1].toFixed(1) + ' s</small></div><div style="width:44%">' + (sparkline(v.slice(-30), 200, 34) || '<small>one run so far</small>') + '</div></div>');
+    }
+  });
+  $('card').innerHTML = '<h3>Progress</h3><div class="prog" data-stay>' + (rows.join('') || '<div class="coach">No runs recorded yet. Finish a run and it will show up here.</div>') +
+    '</div><div class="btns" data-stay><button class="primary" data-act="menu">Close</button></div>';
+}
+
+/* ----- Timing drills: short rounds that grade one decision ----- */
+let trainer = null;
+function trainerStart() {
+  const m = MAPS[mapIdx]; trainer = null;
+  if (!m.trainer || $('optNoChaser').checked) return;
+  trainer = { kind: m.trainer, round: 0, rounds: 10, results: [], resetAt: -1, vault: null, home: { rx: runner.x, ry: runner.y, cx: chaser.x, cy: chaser.y } };
+  trainerRound();
+}
+function trainerRound() {
+  const T = trainer, r = runner, c = chaser, H0 = T.home;
+  T.round++; T.resetAt = -1; T.vault = null;
+  for (const s of allSpecials()) { if (s.type === 'pallet') s.state = 'up'; if (s.type === 'window') { s.vaults = 0; s.jamUntil = 0; } }
+  Object.assign(r, { x: H0.rx, y: H0.ry, vault: null, hp: 2, boost: 0, vx: 0, vy: 0, slowT: 0, hidden: null, carried: null, hooked: null, face: 0 });
+  // the chaser starts a different distance behind each round, so every round is a fresh judgement
+  const off = T.kind === 'window' ? Math.random() * 4.2 : Math.random() * 3 - 1;
+  Object.assign(c, { x: Math.max(1.5, H0.cx + off), y: H0.cy, state: 'chase', t: 0, path: null, repath: 0, vault: null, target: null, chaseT: 0, tier: 0, face: 0, charge: false, baitNext: 0 });
+  c.kx = r.x; c.ky = r.y; c.kf = 0; c.kvia = -1; c.lastLeadT = now; c.onLead = true; c.inChase = true; c.lastSawT = now; c.markT = now;
+  marks = []; blood = [];
+  say('Round ' + T.round + ' of ' + T.rounds + (T.kind === 'pallet' ? ': drop the pallet at the last safe moment' : ': vault only if it is safe'));
+}
+function trainerResult(v, text, col) {
+  const T = trainer; if (!T || T.resetAt >= 0) return;
+  T.results.push(v); say(text); floatText(runner.x, runner.y - 1.6, text.split(':')[0], col);
+  T.resetAt = now + 1.8;
+}
+function trainerVaultLanded() {
+  const e = trainer.vault; trainer.vault = null;
+  if (!e.fast) trainerResult('slow', 'Slow vault: you made it, but run straight at the window for a moment first', '#f0b648');
+  else if (e.v === 'safe' || e.v === 'clear') trainerResult('safe', 'Safe: a clean fast vault', PAL.run);
+  else trainerResult('tight', 'Tight: you made it, but only just. Vault a little sooner', '#f0b648');
+}
+function trainerCard() {
+  const T = trainer, res = T.results, n = v => res.filter(x => x === v).length, row = (k, v) => '<div>' + k + ' <b>' + v + '</b></div>';
+  let html;
+  if (T.kind === 'pallet') {
+    html = '<h3>Pallet timing</h3><div class="big">' + n('perfect') + '<span style="font-size:20px;color:var(--dim)"> stuns of ' + res.length + '</span></div>' +
+      '<div class="grid">' + row('Perfect (stun)', n('perfect')) + row('Good (safe)', n('good')) + row('Too early', n('early')) + row('Too late', n('late')) + '</div>' +
+      '<div class="coach">' + (n('early') > n('late') ? 'You tend to drop early. Wait until the chaser is one step from the pallet: the gap closes faster than it looks.'
+        : n('late') > n('early') ? 'You tend to drop late. Drop as the chaser reaches the end of the wall, not when it reaches you.'
+        : 'Watch the gap between the chaser and the pallet, not between the chaser and you.') + '</div>';
+  } else {
+    html = '<h3>Window timing</h3><div class="big">' + n('safe') + '<span style="font-size:20px;color:var(--dim)"> safe of ' + res.length + '</span></div>' +
+      '<div class="grid">' + row('Safe fast vaults', n('safe')) + row('Tight', n('tight')) + row('Slow vaults', n('slow')) + row('Hit mid-vault', n('risky')) + row('Waited too long', n('late')) + '<div></div></div>' +
+      '<div class="coach">' + (n('risky') ? 'You vaulted with the chaser too close. If it is within about 3 m when you reach the window, a vault will not finish in time.'
+        : n('slow') ? 'Line up and run straight at the window for a metre before you press the button: that gives the fast vault.'
+        : n('late') ? 'You held on too long before vaulting. Commit to the window earlier.'
+        : 'Clean set. Try it on Hard.') + '</div>';
+  }
+  $('card').innerHTML = html + cardButtons(); $('overlay').classList.remove('hide'); lastCard = $('card').innerHTML; buildDrills();
+}
+
+/* ----- Caught: carried to the nearest hook, unless you wriggle free on the way ----- */
+function startCarry() {
+  const c = chaser, r = runner, N = W * H, back = curFloor;
+  if ($('optNoChaser').checked) return false;
+  const from = c.floor * N + Math.floor(c.y) * W + Math.floor(c.x);
+  let best = null, bl = 1e9;
+  for (let f = 0; f < FL.length; f++) {
+    const F = FL[f];
+    for (let i = 0; i < N; i++) if (F.PROP[i] === '6') for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const j = i + dy * W + dx; if (F.G[j] === 1 || F.spec[j] || F.PBLOCK[j] || F.HILL[j] || F.VOID[j]) continue;
+      const p = findPath(from, f * N + j, null); if (p && p.length < bl) { bl = p.length; best = { f, j, hook: i }; }
+    }
+  }
+  useFloor(back);
+  if (!best) return false;
+  r.carried = { s: 0, side: 0 }; r.hidden = null; r.vault = null; r.boost = 0; r.vx = r.vy = 0;
+  c.state = 'carry'; c.carry = best; c.path = null; c.repath = 0; c.carryWait = 0; c.carryT = 0; c.cross = null; c.breakT = null;
+  flash = 1; buzz(400, 1);
+  say('Picked up! Mash ' + keyLabel(KB.act[0]) + ' (or rock left and right) to wriggle free');
+  return true;
+}
+function carriedRunner(dt) {
+  const r = runner, c = chaser;
+  if (r.hooked) { r.hooked.t += dt; r.vx = r.vy = 0; if (r.hooked.t >= 1.4) endRun('hooked'); return; }
+  const K = r.carried;
+  r.x = c.x; r.y = c.y; r.floor = c.floor; r.vx = r.vy = 0; r.running = false;
+  K.s = Math.max(0, K.s - dt * 0.05);
+  if (spacePressed) K.s += 0.08;
+  const [dx] = inputDir(), side = dx > 0.5 ? 1 : dx < -0.5 ? -1 : 0;
+  if (side && side !== K.side) { K.s += 0.05; K.side = side; }
+  if (K.s >= 1) {
+    r.carried = null; r.hp = 1; r.boost = CFG.boostTime; stats.wriggles++;
+    const b = c.face + Math.PI; r.x = c.x + Math.cos(b) * 0.7; r.y = c.y + Math.sin(b) * 0.7; resolve(r);
+    c.state = 'stun'; c.t = 2.5; c.carry = null; c.path = null; c.carryWait = 0; c.cross = null; c.breakT = null;
+    say('You wriggled free!'); floatText(r.x, r.y - .8, 'FREE!', PAL.run); buzz(150, .5);
+    if (rec) rec.ev.push({ t: now, k: 'fx', x: r.x, y: r.y - .8, txt: 'FREE!', col: PAL.run });
+  }
+}
+function hookRunner() {
+  const c = chaser, r = runner, K = c.carry;
+  const hx = K.hook % W, hy = (K.hook / W) | 0, f = ((hx * 7 + hy * 13) % 5) / 5 > .5 ? -1 : 1;
+  r.carried = null; r.hooked = { t: 0 }; r.floor = K.f; r.x = hx + .5 + 1.05 * f; r.y = hy + .5 - 0.55 + 0.72;
+  c.state = 'cool'; c.t = 3; c.carry = null; c.path = null;
+  flash = 1; say('Hooked'); buzz(300, 1);
+}
+function carryStep(dt, D) {
+  const c = chaser, K = c.carry, N = W * H;
+  c.carryT += dt;
+  if (c.carryT > 40) { hookRunner(); return; }          // stuck somewhere: don't hang the run
+  if (c.carryWait > 0) {                                 // breaking a pallet, or climbing through a window with you on its shoulder
+    c.carryWait -= dt;
+    if (c.cross) { const v = c.cross; v.p = Math.min(1, v.p + dt / 2.2); c.x = v.fx + (v.tx - v.fx) * v.p; c.y = v.fy + (v.ty - v.fy) * v.p; }
+    if (c.carryWait <= 0) { if (c.breakT) { c.breakT.state = 'broken'; c.breakT = null; } c.cross = null; c.path = null; }
+    return;
+  }
+  const gx = (K.j % W) + .5, gy = ((K.j / W) | 0) + .5;
+  if (c.floor === K.f && Math.hypot(c.x - gx, c.y - gy) < 0.5) { hookRunner(); return; }
+  const cell = Math.floor(c.y) * W + Math.floor(c.x), cellN = c.floor * N + cell;
+  c.repath -= dt;
+  if (c.repath <= 0 || !c.path) { c.path = findPath(cellN, K.f * N + K.j, null); c.repath = 0.4; if (!c.path) { hookRunner(); return; } }
+  const path = c.path; let tx = gx, ty = gy;
+  if (path.length >= 2) {
+    const f1 = (path[1] / N) | 0, i1 = path[1] - f1 * N, s1 = f1 === c.floor ? spec[i1] : null;
+    if (f1 !== c.floor) {
+      tx = (cell % W) + .5; ty = ((cell / W) | 0) + .5;
+      if (STAIR[cell]) { const [ax, ay] = STAIR_DIRS[STAIR[cell] - 1], sgn = c.floor === 0 ? 1 : -1; tx += ax * .3 * sgn; ty += ay * .3 * sgn; }
+    } else if (blocking(s1)) {
+      tx = (cell % W) + .5; ty = ((cell / W) | 0) + .5;
+      if (Math.hypot(tx - c.x, ty - c.y) < 0.2) {
+        const sx = s1.x + .5, sy = s1.y + .5;
+        if (s1.type === 'window') { c.cross = { fx: c.x, fy: c.y, tx: sx + (sx - tx) * 0.95, ty: sy + (sy - ty) * 0.95, p: 0 }; c.carryWait = 2.2; }
+        else { c.breakT = s1; c.carryWait = CFG.breakTime; }
+        return;
+      }
+    } else {
+      let k = 1;
+      for (let j = 1; j < Math.min(path.length, 8); j++) {
+        const fj = (path[j] / N) | 0, ij = path[j] - fj * N;
+        if (fj !== c.floor || blocking(spec[ij])) break;
+        if (walkClear(c.x, c.y, (ij % W) + .5, ((ij / W) | 0) + .5, c.r)) k = j;
+        if (STAIR[ij] || AIR[ij]) break;
+      }
+      const ik = path[k] - ((path[k] / N) | 0) * N; tx = (ik % W) + .5; ty = ((ik / W) | 0) + .5;
+    }
+  }
+  const dx = tx - c.x, dy = ty - c.y, l = Math.hypot(dx, dy), sp = D.speed * 0.8 * (GROUND_SPEED[groundAt(c.x, c.y)] || 1);
+  if (l > 0.01) {
+    const st = Math.min(l, sp * dt); turnToward(c, dx / l, dy / l, 12, dt);
+    c.x += dx / l * st; c.y += dy / l * st; resolve(c); floorCheck(c, 0.8);
+  }
+}
+function drawCarried(vf) {
+  const r = runner, c = chaser;
+  if (r.carried && c.floor === vf) {
+    const a = c.face + Math.PI / 2, x = c.x + Math.cos(a) * 0.22, y = c.y + Math.sin(a) * 0.22;
+    drawPerson(x, y, c.face + Math.PI / 2, r.r * 0.85, PAL.run, '#e8c9a0', mode === 'play' ? now * 20 : null, false);
+    if (mode === 'play') {
+      ctx.fillStyle = '#0e1213'; ctx.fillRect(c.x - .6, c.y - 1.0, 1.2, .16);
+      ctx.fillStyle = '#f0b648'; ctx.fillRect(c.x - .6, c.y - 1.0, 1.2 * Math.min(1, r.carried.s), .16);
+    }
+  }
+  if (r.hooked && r.floor === vf) {
+    drawPerson(r.x, r.y, Math.PI / 2, r.r, PAL.run, '#e8c9a0', null, false);
+    ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .06; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .12, 0, 7); ctx.stroke();
+  }
+}
+
+/* ----- Injured: a blood trail the chaser can follow, and pained noises it can hear ----- */
+let blood = [];
+function injuredTick(dt, moving) {
+  const r = runner, c = chaser;
+  if (!$('optBlood').checked || r.hp >= 2 || r.hidden || trainer || mode !== 'play') return;
+  r.bloodDist += moving ? Math.hypot(r.vx, r.vy) * dt : dt * 0.4;
+  if (r.bloodDist > 0.6) {
+    r.bloodDist = 0;
+    const b = { x: r.x + (Math.random() - .5) * .5, y: r.y + (Math.random() - .5) * .5, t: now, f: r.floor, s: .045 + Math.random() * .06 };
+    blood.push(b); if (rec) rec.blood.push(b);
+  }
+  if (now >= r.groanNext) {
+    r.groanNext = now + 2.5 + Math.random() * 3;
+    sndGroan();
+    if (!$('optNoChaser').checked && c.floor === r.floor && !c.inChase && c.state !== 'carry' && Math.hypot(c.x - r.x, c.y - r.y) < 10 * WX.hear) {
+      c.kx = r.x; c.ky = r.y; c.kf = r.floor; c.kvia = -1; c.lastLeadT = now; c.onLead = true; c.repath = 0;
+      floatText(r.x, r.y - 1.1, 'heard!', '#e2503f');
+    }
+  }
+}
+function drawBlood(vf) {
+  if (mode === 'menu' || mode === 'edit') return;
+  const L = bloodLifeNow(); if (mode !== 'replay') blood = blood.filter(b => now - b.t < L);
+  for (const b of blood) {
+    if (b.f !== vf) continue;
+    ctx.fillStyle = 'rgba(150,12,16,' + (Math.max(0, 1 - (now - b.t) / L) * .85).toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.s, 0, 7); ctx.fill();
+  }
+}
+
+/* ----- Weather on screen: rain streaks, or fog / darkness everywhere but close to you ----- */
+let wxCv = null, rainDrops = null;
+function drawWeather() {
+  if (!(mode === 'play' || mode === 'over' || mode === 'replay') || WX.name === 'clear') return;
+  const dpr = window.devicePixelRatio || 1, r = runner;
+  if (WX.name === 'rain') {
+    ctx.fillStyle = 'rgba(20,32,44,.22)'; ctx.fillRect(0, 0, vw, vh);
+    if (!rainDrops) rainDrops = Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]);
+    const t = performance.now() / 1000;
+    ctx.strokeStyle = 'rgba(170,200,220,.35)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (const [u, v, sp] of rainDrops) { const y = ((v + t * sp) % 1) * (vh + 40) - 20, x = ((u + t * sp * 0.15) % 1) * vw; ctx.moveTo(x, y); ctx.lineTo(x - 3, y + 14); }
+    ctx.stroke(); return;
+  }
+  if (!wxCv) wxCv = document.createElement('canvas');
+  if (wxCv.width !== cv.width || wxCv.height !== cv.height) { wxCv.width = cv.width; wxCv.height = cv.height; }
+  const g = wxCv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, vw, vh);
+  g.fillStyle = WX.name === 'fog' ? 'rgba(128,138,142,.9)' : 'rgba(3,5,8,.93)'; g.fillRect(0, 0, vw, vh);
+  g.globalCompositeOperation = 'destination-out';
+  const hole = (x, y, rad, inner) => {
+    const gr = g.createRadialGradient(x, y, rad * inner, x, y, rad); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+  };
+  hole(ox + r.x * S, oy + r.y * S, WX.view * S, WX.name === 'fog' ? 0.25 : 0.55);
+  if (WX.name === 'night') {
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (PROP[y * W + x] === 'B') hole(ox + (x + .5) * S, oy + (y + .5) * S, 3.2 * S, 0.3);
+    for (const s of allSpecials()) if (s.type === 'gate' && s.state === 'open') hole(ox + (s.x + .5) * S, oy + (s.y + .5) * S, 2.2 * S, 0.2);
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(wxCv, 0, 0); ctx.restore();
+}
+
+/* ----- Minimap, shown when the map is too big to fit on screen ----- */
+let miniCache = null;
+function drawMinimap(fitS) {
+  if (!$('optMini').checked || !(mode === 'play' || mode === 'over' || mode === 'replay') || fitS >= MIN_TILE) return;
+  const vf = Math.min(FL.length - 1, runner.floor), F = FL[vf];
+  const bw = VB[2] - VB[0], bh = VB[3] - VB[1], k = Math.max(1, Math.min(170 / bw, 120 / bh, 3)), vb = VB.join(',');
+  if (!miniCache || miniCache.G !== F.G || miniCache.gate !== !!autoGate || miniCache.vb !== vb) {
+    const c2 = document.createElement('canvas'); c2.width = bw; c2.height = bh;
+    const g = c2.getContext('2d'), img = g.createImageData(bw, bh);
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+      const i = (y + VB[1]) * W + x + VB[0], o = (y * bw + x) * 4;
+      if (F.VOID[i]) continue;
+      const wall = F.G[i] === 1;
+      img.data[o] = wall ? 150 : 34; img.data[o + 1] = wall ? 165 : 44; img.data[o + 2] = wall ? 170 : 48; img.data[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0); miniCache = { G: F.G, gate: !!autoGate, vb, cv: c2 };
+  }
+  const mw = bw * k, mh = bh * k, mx = vw - mw - 10, my = 10;
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,13,14,.75)'; ctx.fillRect(mx - 4, my - 4, mw + 8, mh + 8);
+  ctx.globalAlpha = 0.9; ctx.imageSmoothingEnabled = false; ctx.drawImage(miniCache.cv, mx, my, mw, mh); ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.rect(mx, my, mw, mh); ctx.clip();
+  const P = (x, y) => [mx + (x - VB[0]) * k, my + (y - VB[1]) * k];
+  const [vx0, vy0] = P(-ox / S, -oy / S);
+  ctx.strokeStyle = 'rgba(217,226,224,.55)'; ctx.lineWidth = 1; ctx.strokeRect(vx0, vy0, vw / S * k, vh / S * k);
+  const dot = (x, y, col, rad) => { const [px, py] = P(x, y); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(px, py, rad, 0, 7); ctx.fill(); };
+  for (const s of allSpecials()) {
+    if (s.type === 'task' && s.state !== 'done') dot(s.x + .5, s.y + .5, '#f0b648', 2.5);
+    if ((s.type === 'gate' && !s.group) || s.type === 'switch') dot(s.x + .5, s.y + .5, s.state === 'open' ? PAL.run : '#c9d2d4', 3);
+    if (s.type === 'hatch' && hatchOpen()) dot(s.x + .5, s.y + .5, PAL.run, 3);
+  }
+  const E = FL[0].EXITL; for (let i = 0; i < E.length; i++) if (E[i]) dot((i % W) + .5, ((i / W) | 0) + .5, PAL.run, 1.5);
+  const c = chaser;
+  if (!$('optNoChaser').checked && c.floor === vf && (mode !== 'play' || $('optAura').checked || (c.sees && chaserInView(c, runner)))) dot(c.x, c.y, PAL.chase, 3.5);
+  dot(runner.x, runner.y, PAL.run, 3.5);
+  ctx.restore();
+}
+
+/* ----- Daily map and share codes ----- */
+function dailyMap() {
+  const d = new Date(), key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const have = MAPS.findIndex(m => m.id === 'daily-' + key);
+  if (have >= 0) { mapIdx = have; store('lt_map', mapIdx); buildDrills(); showMenu(); return; }
+  for (let i = MAPS.length - 1; i >= 0; i--) if (MAPS[i].custom && /^daily-/.test(MAPS[i].id || '')) MAPS.splice(i, 1);   // yesterday's goes
+  withSeed(Math.imul(parseInt(key.replace(/-/g, ''), 10), 2654435761) >>> 0, () => randomDrill(key));
+}
+const b64u = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = str => { const s = atob(str.replace(/-/g, '+').replace(/_/g, '/')); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; };
+async function shareCode() {
+  const m = MAPS[mapIdx]; if (!m.custom) { dataMsg('Only your own drills can be shared. Use Copy & edit first.'); return; }
+  const d = { n: m.name, r: savedRows(m) };
+  const g = savedGround(m); if (g.some(r => /[^.]/.test(r))) d.g = g;
+  const l = savedRail(m); if (l.some(r => /[^0]/.test(r))) d.l = l;
+  const o = savedObjs(m); if (o.length) d.o = o;
+  const u = savedUp(m); if (u) d.u = u;
+  const json = JSON.stringify(d); let code;
+  try {
+    if (!window.CompressionStream) throw new Error('none');
+    const buf = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+    code = 'LT1.' + b64u(new Uint8Array(buf));
+  } catch (e) { code = 'LT0.' + b64u(new TextEncoder().encode(json)); }
+  $('codeBox').classList.remove('hide'); $('codeIn').value = code;
+  try { await navigator.clipboard.writeText(code); dataMsg('Code for "' + m.name + '" copied (' + code.length + ' characters). Send it to a friend: they press Load code and paste it.'); }
+  catch (e) { dataMsg('Here is the code for "' + m.name + '". Select it in the box and copy it.'); $('codeIn').select(); }
+}
+async function loadCode(text) {
+  const mm = /^LT([01])\.([A-Za-z0-9_-]+)$/.exec((text || '').replace(/\s+/g, ''));
+  if (!mm) { dataMsg('That doesn\'t look like a drill code (they start with LT1.).'); return; }
+  let d = null;
+  try {
+    const bytes = unb64u(mm[2]);
+    const json = mm[1] === '1' ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text() : new TextDecoder().decode(bytes);
+    d = JSON.parse(json);
+  } catch (e) { d = null; }
+  if (!d || !Array.isArray(d.r)) { dataMsg('That code is damaged or incomplete.'); return; }
+  const id = 'c' + Date.now().toString(36);
+  importData(JSON.stringify({ app: 'loop-trainer', drills: [{ id, name: String(d.n || 'Shared drill'), rows: d.r, ground: d.g, rail: d.l, objs: d.o, up: d.u }], stamps: [] }));
+  const i = MAPS.findIndex(m => m.id === id);
+  if (i < 0) { dataMsg('That code is damaged or incomplete.'); return; }
+  mapIdx = i; store('lt_map', i); buildDrills(); showMenu();
+  $('codeBox').classList.add('hide'); $('codeIn').value = ''; dataMsg('Added "' + MAPS[i].name + '" from the code.');
+}
+
+/* ----- Editor: undo / redo, copy / paste, symmetry ----- */
+let undoSt = [], redoSt = [], edLast = null, edStroke = 0, edStrokeN = 0, edStrokeDone = -1, edBusy = false, edClip = null, symLast = {};
+const edSnap = m => JSON.stringify({ rows: savedRows(m), ground: savedGround(m), rail: savedRail(m), objs: savedObjs(m), up: savedUp(m) || null });
+// Called on every save: if the drill changed, the old version goes on the undo list (once per drag of the mouse).
+function edTrack() {
+  const m = MAPS[mapIdx]; if (mode !== 'edit' || !m || !m.custom || ws || edBusy) return;
+  const cur = edSnap(m);
+  if (edLast === null || cur === edLast) { edLast = cur; return; }
+  if (!edStroke || edStroke !== edStrokeDone) { undoSt.push(edLast); if (undoSt.length > 120) undoSt.shift(); redoSt = []; edStrokeDone = edStroke; }
+  edLast = cur;
+}
+function edReset() { undoSt = []; redoSt = []; edStrokeDone = -1; const m = MAPS[mapIdx]; edLast = m && m.custom ? edSnap(m) : null; }
+function edRestore(json) {
+  const m = MAPS[mapIdx], d = JSON.parse(json), f = edFloor;
+  if (ws) setTool('#');
+  if (m.swapped) swapFloors(m);
+  m.rows = d.rows; m.ground = d.ground; m.rail = d.rail; m.objs = d.objs; m.up = d.up ? { rows: d.up.rows, ground: d.up.ground, rail: d.up.rail } : undefined;
+  if (f === 1) { if (m.up) swapFloors(m); else { edFloor = 0; syncFloorBtns(); } }
+  edBusy = true; saveCustom(); edBusy = false; edLast = json;
+  sel = null; loadMap();
+  $('edW').value = m.rows[0].length; $('edH').value = m.rows.length;
+}
+function edUndo() { if (!undoSt.length) { edMsg('Nothing to undo.'); return; } redoSt.push(edLast); edRestore(undoSt.pop()); edMsg('Undone' + (undoSt.length ? ' (' + undoSt.length + ' more)' : '') + '. Ctrl+Y redoes.'); }
+function edRedo() { if (!redoSt.length) { edMsg('Nothing to redo.'); return; } undoSt.push(edLast); edRestore(redoSt.pop()); edMsg('Redone.'); }
+function edCopy() {
+  const m = MAPS[mapIdx], picked = [...selSet].map(k => [k % 1000, (k / 1000) | 0]).filter(([x, y]) => m.rows[y] && STRUCT_RE.test(m.rows[y][x] || ''));
+  if (!picked.length) { edMsg('Select a structure first (Select structure tool), then Copy.'); return false; }
+  const x0 = Math.min(...picked.map(p => p[0])), x1 = Math.max(...picked.map(p => p[0])), y0 = Math.min(...picked.map(p => p[1])), y1 = Math.max(...picked.map(p => p[1]));
+  const set = new Set(picked.map(([x, y]) => y * 1000 + x)), rows = [];
+  for (let y = y0; y <= y1; y++) { let s = ''; for (let x = x0; x <= x1; x++) s += set.has(y * 1000 + x) ? m.rows[y][x] : '.'; rows.push(s); }
+  edClip = rows; edMsg('Copied ' + picked.length + ' tiles. Press Paste (Ctrl+V), then click where it should go.'); return true;
+}
+function edPaste() {
+  if (!edClip) { edMsg('Nothing copied yet: select a structure and press Copy.'); return; }
+  setTool('stamp'); stampRows = edClip.slice(); edMsg('Click to paste it. R rotates, M mirrors. Pick another tool when you are done.');
+}
+function edKey(e) {
+  if (e.code === 'KeyZ' && !e.shiftKey) { edUndo(); return true; }
+  if (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey)) { edRedo(); return true; }
+  if (e.code === 'KeyC') return edCopy();
+  if (e.code === 'KeyV') { edPaste(); return true; }
+  return false;
+}
+const symAxes = () => ({ x: ['x'], y: ['y'], xy: ['x', 'y', 'xy'] })[$('edSym').value] || [];
+// Paint the same thing on the mirrored side(s), turning angled pieces to match.
+// p is the tile the click was on, worked out before painting (painting can resize the view, which would move it)
+function symPaint(e, erase, p) {
+  const ax = symAxes(); if (!ax.length || ws || tool === 'R' || tool === 'C') return;
+  if (!p) return;
+  const m = MAPS[mapIdx], w = m.rows[0].length, h = m.rows.length, rect = cv.getBoundingClientRect();
+  const keep = { tool, triCorner, lockIdx, palDiag, lastPaint, hover };
+  for (const a of ax) {
+    const x = a.includes('x') ? w - 1 - p[0] : p[0], y = a.includes('y') ? h - 1 - p[1] : p[1];
+    if (x === p[0] && y === p[1]) continue;
+    tool = keep.tool; triCorner = keep.triCorner; lockIdx = keep.lockIdx; palDiag = keep.palDiag;
+    if (a.includes('x')) { triCorner = [1, 0, 3, 2][triCorner]; lockIdx = [0, 3, 2, 1][lockIdx]; if (tool === 'I' || tool === 'Y') tool = tool === 'I' ? 'Y' : 'I'; }
+    if (a.includes('y')) { triCorner = [3, 2, 1, 0][triCorner]; lockIdx = [2, 1, 0, 3][lockIdx]; if (tool === 'U' || tool === 'M') tool = tool === 'U' ? 'M' : 'U'; }
+    if (a !== 'xy' && palDiag) palDiag = 3 - palDiag;
+    lastPaint = symLast[a] || null;
+    paintAt({ clientX: rect.left + ox + (x + 1.5) * S, clientY: rect.top + oy + (y + 1.5) * S, button: e.button }, erase);
+    symLast[a] = lastPaint;
+  }
+  tool = keep.tool; triCorner = keep.triCorner; lockIdx = keep.lockIdx; palDiag = keep.palDiag; lastPaint = keep.lastPaint; hover = keep.hover;
+}
+const VFLIP_CH = { F: 'V', V: 'F', N: 'Q', Q: 'N', 1: '2', 2: '1', L: '4', 4: 'L', U: 'M', M: 'U' };
+function symStamp(e, p) {
+  const ax = symAxes(); if (!ax.length || !stampRows || !p) return;
+  const m = MAPS[mapIdx], w = m.rows[0].length, h = m.rows.length, rect = cv.getBoundingClientRect(), keep = stampRows;
+  const sw = keep[0].length, sh = keep.length, x0 = p[0] - (sw >> 1), y0 = p[1] - (sh >> 1);
+  for (const a of ax) {
+    let rows = keep;
+    if (a.includes('x')) rows = rows.map(r => r.split('').reverse().map(ch => MIR_CH[ch] || ({ I: 'Y', Y: 'I' })[ch] || ch).join(''));
+    if (a.includes('y')) rows = rows.slice().reverse().map(r => r.split('').map(ch => VFLIP_CH[ch] || ch).join(''));
+    const nx0 = a.includes('x') ? w - x0 - sw : x0, ny0 = a.includes('y') ? h - y0 - sh : y0;
+    if (nx0 === x0 && ny0 === y0) continue;
+    stampRows = rows;
+    placeStamp({ clientX: rect.left + ox + (nx0 + (sw >> 1) + 1.5) * S, clientY: rect.top + oy + (ny0 + (sh >> 1) + 1.5) * S, button: 0 });
+  }
+  stampRows = keep;
+}
+
+/* ----- Options and their controls ----- */
+const OPT_DEF = { optCoach: 1, optHeat: 0, optHook: 1, optBlood: 1, optMini: 1, optCB: 0, optVib: 1, optAdapt: 0 };
+for (const id in OPT_DEF) {
+  const v = store('lt_' + id); $(id).checked = v === null || v === undefined ? !!OPT_DEF[id] : v === '1';
+  $(id).addEventListener('change', e => {
+    store('lt_' + id, e.target.checked ? '1' : '0'); e.target.blur();
+    if (id === 'optCB') setPalette();
+    if (id === 'optAdapt' || id === 'optCB') { buildDrills(); if (mode === 'menu') showMenu(); }
+  });
+}
+for (const id of ['optType', 'optWeather']) {
+  const v = store('lt_' + id); if (v && [...$(id).options].some(o => o.value === v)) $(id).value = v;
+  $(id).addEventListener('change', e => { store('lt_' + id, e.target.value); e.target.blur(); if (mode === 'menu') showMenu(); });
+}
+setPalette(); buildKeyList();
+$('keyList').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; b.blur(); kbCapture = kbCapture === b.dataset.k ? null : b.dataset.k; padCapture = null; buildKeyList(); });
+$('padList').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (!b) return; b.blur(); padCapture = padCapture === b.dataset.p ? null : b.dataset.p; kbCapture = null; buildKeyList(); });
+$('kbReset').addEventListener('click', e => {
+  e.target.blur(); KB = JSON.parse(JSON.stringify(KB_DEF)); PADK.act = 0; PADK.restart = 3; kbCapture = padCapture = null;
+  store('lt_keys', JSON.stringify(KB)); store('lt_padkeys', JSON.stringify(PADK)); buildKeyList(); if (mode === 'menu') showMenu();
+});
+$('heatClear').addEventListener('click', e => { e.preventDefault(); e.target.blur(); store(hitKey(), '[]'); heatCache = null; say('Hit map cleared for this drill'); });
+$('rpPlay').addEventListener('click', e => { e.target.blur(); replayToggle(); });
+$('rpExit').addEventListener('click', e => { e.target.blur(); exitReplay(); });
+$('rpSeek').addEventListener('input', e => { if (!replay) return; replay.playing = false; replaySeek(replay.len * e.target.value / 1000); syncReplayBar(); });
+$('replayBar').addEventListener('click', e => { const b = e.target.closest('[data-sp]'); if (b && replay) { replay.speed = +b.dataset.sp; syncReplayBar(); b.blur(); } });
+$('card').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  e.stopPropagation(); b.blur();
+  if (b.dataset.act === 'again') startRun(); else if (b.dataset.act === 'replay') startReplay(); else if (b.dataset.act === 'menu') showMenu();
+});
+$('codeGo').addEventListener('click', e => { e.target.blur(); loadCode($('codeIn').value); });
+$('edUndo').addEventListener('click', e => { e.target.blur(); edUndo(); });
+$('edRedo').addEventListener('click', e => { e.target.blur(); edRedo(); });
+$('edCopy').addEventListener('click', e => { e.target.blur(); edCopy(); });
+$('edPaste').addEventListener('click', e => { e.target.blur(); edPaste(); });
+$('edSym').addEventListener('change', e => {
+  e.target.blur();
+  edMsg(e.target.value ? 'Symmetry on: whatever you paint or stamp is copied to the mirrored side' + (e.target.value === 'xy' ? 's' : '') + ' of the map. Start points and cars are not mirrored.' : 'Symmetry off.');
+});
 
 loadCustom();
 const sm = parseInt(store('lt_map'), 10); if (sm >= 0 && sm < MAPS.length) mapIdx = sm;
@@ -3821,6 +4795,20 @@ function sndInit() {
   snd.chase = c.createGain(); snd.chase.gain.value = 0;
   snd.lp = c.createBiquadFilter(); snd.lp.type = 'lowpass'; snd.lp.frequency.value = 900;
   snd.chase.connect(snd.lp); snd.lp.connect(snd.master);
+  // rain: a bright hiss with a softer rush under it
+  snd.rain = c.createGain(); snd.rain.gain.value = 0; snd.rain.connect(snd.master);
+  const rn = c.createBufferSource(); rn.buffer = bright; rn.loop = true;
+  const rnF = c.createBiquadFilter(); rnF.type = 'bandpass'; rnF.frequency.value = 2600; rnF.Q.value = 0.4;
+  const rn2 = c.createBufferSource(); rn2.buffer = soft; rn2.loop = true; const rn2G = c.createGain(); rn2G.gain.value = 0.6;
+  rn.connect(rnF); rnF.connect(snd.rain); rn2.connect(rn2G); rn2G.connect(snd.rain); rn.start(); rn2.start();
+  // pained noises go through a soft resonant filter so they sound more like a voice than a buzzer
+  snd.groanF = c.createBiquadFilter(); snd.groanF.type = 'lowpass'; snd.groanF.frequency.value = 900; snd.groanF.Q.value = 3; snd.groanF.connect(snd.master);
+}
+function sndGroan() {
+  const c = snd.ctx; if (!c || !snd.on || !snd.groanF) return;
+  const t = c.currentTime, f = 160 + Math.random() * 50;
+  sndNote(t, 'sawtooth', f, 0.55, 0.16, 0.05, snd.groanF, f * 0.7);
+  sndNote(t, 'triangle', f * 2.02, 0.45, 0.08, 0.05, snd.groanF, f * 1.3);
 }
 // one shaped note: an oscillator with a volume envelope
 function sndNote(t, type, freq, dur, vol, attack, dest, endFreq) {
@@ -3907,12 +4895,13 @@ function sndTick() {
   // the instant the claw closes on you, one clash and every running sound is cut dead
   if (playing && runner.taken && runner.taken.t >= 0.95) {
     if (!runner.taken.clashed) { runner.taken.clashed = true; sndClash(); }
-    for (const k of ['amb', 'chase', 'end', 'eng', 'siren', 'grind']) { snd[k].gain.cancelScheduledValues(t); snd[k].gain.setTargetAtTime(0, t, 0.012); }
+    for (const k of ['amb', 'chase', 'end', 'eng', 'siren', 'grind', 'rain']) { snd[k].gain.cancelScheduledValues(t); snd[k].gain.setTargetAtTime(0, t, 0.012); }
     snd.wasChase = false; return;
   }
   // once a gate is open the ambience stops and the collapse sound takes over, building until the timer runs out
   const ek = playing && endStart >= 0 ? Math.max(0, Math.min(1, (now - endStart) / CFG.endTime)) : -1;
   snd.amb.gain.setTargetAtTime(playing && ek < 0 ? (chasing ? 0.16 : 0.4) : 0, t, 0.6);             // kept low, and lower still under the music
+  snd.rain.gain.setTargetAtTime(playing && WX.name === 'rain' ? 0.16 : 0, t, 0.8);
   snd.end.gain.setTargetAtTime(ek < 0 ? 0 : 0.1 + 0.4 * ek, t, 0.4);
   if (ek >= 0) {
     snd.endLfo.frequency.setTargetAtTime(1.2 + 5 * ek * ek, t, 0.5);

@@ -194,7 +194,7 @@
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.3</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.4</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
@@ -214,6 +214,10 @@
       <option value="charger">Charger: slower, charges at you</option>
       <option value="lurker">Lurker: hard to see until close</option>
       <option value="trapper">Trapper: lays hidden traps</option>
+      <option value="tracker">Tracker: follows tracks from far away</option>
+      <option value="blinker">Blinker: blinks ahead along its route</option>
+      <option value="howler">Howler: howls to find where you are</option>
+      <option value="brute">Brute: smashes pallets fast, shrugs off stuns</option>
     </select></label>
     <label class="chk"><input type="checkbox" id="optAdapt"> Adaptive: improves as you win <span id="adaptLvl" style="color:var(--dim)"></span></label>
     <label class="chk"><input type="checkbox" id="optTwo"> Two players: a second player is the chaser</label>
@@ -233,6 +237,10 @@
       <option value="burst">Sprint burst: 3 s of speed (40 s recharge)</option>
       <option value="sidestep">Sidestep: a quick dash (12 s recharge)</option>
       <option value="silent">Silent: no tracks or noise for 6 s (35 s recharge)</option>
+      <option value="decoy">Decoy: throw a noise to lure the chaser (30 s recharge)</option>
+      <option value="smoke">Smoke: a cloud the chaser can't see through (40 s recharge)</option>
+      <option value="brace">Brace: shrug off a hit in the next 2 s (45 s recharge)</option>
+      <option value="hurdle">Hurdle: every vault is a fast vault for 10 s (40 s recharge)</option>
     </select></label>
     <label class="row">Weather <select id="optWeather">
       <option value="clear">Clear</option>
@@ -792,7 +800,7 @@ function loadMap() {
              lastDx: 0, lastDy: 0, headT: 0, vx: 0, vy: 0, running: false, lastRunT: -9, markDist: 0,
              hidden: null, hideFrom: null, slowT: 0, hill: 0, onRamp: false, carried: null, hooked: null, bloodDist: 0, groanNext: 0,
              ability: $('optAbility').value === 'none' ? null : $('optAbility').value, abT: 0, abCD: 0, dash: null, trapT: 0, noisyT: -9, noisyR: 0 };
-  marks = []; blood = []; traps = []; caps = []; selSet.clear();
+  marks = []; blood = []; traps = []; caps = []; smokes = []; puffs = []; selSet.clear();
   chaser = { x: cs[0], y: cs[1], r: 0.36, state: 'chase', t: 0, face: Math.PI, dx: 0, dy: 0,
              path: null, repath: 0, cell: -1, prevCell: -1, chaseT: 0, fakeUntil: -9, fakeCell: -1,
              sees: true, target: null, vault: null, tier: 0,
@@ -1069,7 +1077,7 @@ const along = (s, dx) => s.axis === 'x' ? dx !== 0 : dx === 0;
 const ROT_CH = { F: 'N', N: 'Q', Q: 'V', V: 'F', 1: '2', 2: '1', L: '3', 3: '4', 4: '5', 5: 'L' }, MIR_CH = { F: 'N', N: 'F', Q: 'V', V: 'Q', 1: '2', 2: '1', 3: '5', 5: '3' };   // how angled tiles change when turned or flipped
 function findPath(si, ti, pen) {
   const speed = (CH || DIFF[diffKey]).speed;
-  const vaultCost = CFG.chaserVault * speed, breakCost = CFG.breakTime * speed;
+  const vaultCost = chaserVaultNow() * speed, breakCost = breakTimeNow() * speed;
   // A place is a tile on a floor, numbered floor * (tiles per floor) + tile. si, ti and the result use these numbers.
   const N = W * H;
   distBuf.fill(Infinity); prevBuf.fill(-1);
@@ -1264,7 +1272,7 @@ function dropPallet(s) {
   let nx = Math.max(s.x, Math.min(c.x, s.x + 1)), ny = Math.max(s.y, Math.min(c.y, s.y + 1));
   if (s.diag) { const E = diagEnds(s); [nx, ny] = segClosest(c.x, c.y, E[0], E[1], E[2], E[3]); }   // a diagonal pallet only catches what is under its line
   if (Math.hypot(c.x - nx, c.y - ny) < c.r + (s.diag ? 0.3 : 0.15) && c.state !== 'stun' && c.state !== 'vault' && c.floor === runner.floor) {
-    c.state = 'stun'; c.t = CFG.stunTime; c.chaseT = 0; stats.stuns++; stunned = true;
+    c.state = 'stun'; c.t = stunTimeNow(); c.chaseT = 0; stats.stuns++; stunned = true;
     floatText(c.x, c.y - .8, 'STUN!', '#f0b648'); say('Pallet stun'); buzz(120, .4);
   }
   judgeDrop(s, stunned, wasBait);
@@ -1287,7 +1295,8 @@ function dropPallet(s) {
 
 function startRunnerVault(a) {
   const s = a.s, cx = s.x + .5, cy = s.y + .5;
-  const fast = runner.running && a.toward > 0.85 && runner.headT >= 0.28;
+  const hurdle = runner.ability === 'hurdle' && runner.abT > 0;
+  const fast = runner.running && (hurdle ? a.toward > 0.4 : a.toward > 0.85 && runner.headT >= 0.28);
   if (runner.running && !silentNow()) runner.lastRunT = now + (fast ? CFG.fastVault : CFG.slowVault);
   const side = -Math.sign(a.al) * 0.9;
   runner.vault = { fx: runner.x, fy: runner.y,
@@ -1453,6 +1462,12 @@ function hitRunner() {
     if (r.vault) { r.vault = null; trainer.vault = null; }
     return;
   }
+  if (r.ability === 'brace' && r.abT > 0) {   // braced: the hit is shrugged off and you get the speed boost
+    r.abT = 0; r.boost = CFG.boostTime; c.state = 'cool'; c.t = CFG.hitCool; flash = 0.35; buzz(80, .4);
+    stats.braced = (stats.braced || 0) + 1; floatText(r.x, r.y - .7, 'braced!', '#b9b0ff'); say('Braced — the hit glanced off');
+    if (rec) rec.ev.push({ t: now, k: 'fx', x: r.x, y: r.y - .7, txt: 'braced!', col: '#b9b0ff' });
+    return;
+  }
   r.hp--; flash = 1; buzz(250, 1);
   if (r.vault) { stats.vaultHits++; const lv = stats.vaultLog[stats.vaultLog.length - 1]; if (lv) lv.hit = true; }
   for (const s of specials)
@@ -1512,7 +1527,7 @@ function updateChaser(dt) {
   if (c.state === 'carry') { carryStep(dt, D); return; }
   if (c.human) { humanChaser(dt, D); return; }            // two players: the second player drives it
   const dist = Math.hypot(r.x - c.x, r.y - c.y), same = r.floor === c.floor;   // on different floors it can neither see nor reach you
-  c.sees = same && los(c.x, c.y, r.x, r.y) && !(r.bushHide && !(dist <= 0.45 || (c.poke && dist <= 0.8)));   // hidden in a bush unless it bumps right into you, or is searching that bush
+  c.sees = same && los(c.x, c.y, r.x, r.y) && !(r.bushHide && !(dist <= 0.45 || (c.poke && dist <= 0.8))) && !(dist > 1.3 && smokeBlocks(c.x, c.y, r.x, r.y, c.floor));   // hidden in a bush unless it bumps right into you, or is searching that bush
   if (same) stats.closest = Math.min(stats.closest, dist);
   // a broken line of sight: it lost sight of you for over a second during a chase
   if (c.inChase && !c.sees) { if (!c.losFrom) c.losFrom = now; else if (!c.losCounted && now - c.losFrom > 1) { c.losCounted = true; stats.losBreaks++; } }
@@ -1530,12 +1545,12 @@ function updateChaser(dt) {
   if (c.saw) c.lastSawT = now;
   if (c.saw || heard || loud) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; c.leadKind = 'sight'; }
   else {
-    let best = null;
+    let best = null; const trk = D.type === 'tracker';   // a tracker reads tracks from further away, and all round
     for (const m of marks) {
       if ((m.f || 0) !== c.floor) continue;
       if (m.t <= c.markT || now - m.t > markLifeNow()) continue;
       const d = Math.hypot(m.x - c.x, m.y - c.y);
-      if (d > WX.markSee || !(c.inChase || d < 3 || inArc(m.x, m.y)) || !los(c.x, c.y, m.rx, m.ry)) continue;
+      if (d > WX.markSee * (trk ? 1.7 : 1) || !(c.inChase || trk || d < 3 || inArc(m.x, m.y)) || !los(c.x, c.y, m.rx, m.ry) || smokeBlocks(c.x, c.y, m.x, m.y, c.floor)) continue;
       if (!best || m.t > best.t) best = m;
     }
     if (best) {   // follow the freshest mark it can see; a mark on a staircase means the trail carries on upstairs or down
@@ -1545,7 +1560,7 @@ function updateChaser(dt) {
       for (const b of blood) {
         if (b.f !== c.floor || b.t <= c.markT || now - b.t > bloodLifeNow()) continue;
         const d = Math.hypot(b.x - c.x, b.y - c.y);
-        if (d > 7 || !(c.inChase || d < 2.5 || inArc(b.x, b.y)) || !los(c.x, c.y, b.x, b.y)) continue;
+        if (d > (trk ? 11 : 7) || !(c.inChase || trk || d < 2.5 || inArc(b.x, b.y)) || !los(c.x, c.y, b.x, b.y)) continue;
         if (!bb || b.t > bb.t) bb = b;
       }
       if (bb) { c.kx = bb.x; c.ky = bb.y; c.kf = c.floor; c.kvia = -1; c.markT = bb.t; lead = true; c.leadKind = 'marks'; }
@@ -1625,6 +1640,12 @@ function updateChaser(dt) {
     if (c.saw) c.state = 'chase';
     else { c.t -= dt; if (c.t <= 0) { placeTrap(c); c.state = 'chase'; } return; }
   }
+  if (c.state === 'howl') { howlStep(c, r, dt, same, dist); return; }
+  if (c.state === 'blinkup') {          // a blinker gathering itself, then it blinks ahead along its route
+    c.t -= dt; const l = dist || 1; turnToward(c, (r.x - c.x) / l, (r.y - c.y) / l, 6, dt);
+    if (c.t <= 0) { blinkJump(c, r); c.state = 'chase'; c.path = null; c.repath = 0; }
+    return;
+  }
   if (c.state === 'kick') {             // damaging a task box
     c.t -= dt;
     if (c.t <= 0) {
@@ -1701,7 +1722,7 @@ function updateChaser(dt) {
     return;
   }
   if (c.state === 'vault') {
-    const v = c.vault; v.p += dt / CFG.chaserVault; const p = Math.min(1, v.p);
+    const v = c.vault; v.p += dt / chaserVaultNow(); const p = Math.min(1, v.p);
     c.x = v.fx + (v.tx - v.fx) * p; c.y = v.fy + (v.ty - v.fy) * p;
     if (v.p >= 1) { c.state = 'chase'; c.vault = null; c.path = null; }
     return;
@@ -1745,6 +1766,12 @@ function updateChaser(dt) {
   }
   // a trapper sets traps along its patrol while it has no idea where you are
   if (D.type === 'trapper' && c.state === 'chase' && !c.inChase && !lead && trapperWants(c)) { c.state = 'settrap'; c.t = 1.2; return; }
+  // a howler stops to howl now and then: unless you are hidden, the howl gives away where you are
+  if (D.type === 'howler' && c.state === 'chase' && !c.inChase && !lead && now > (c.howlNext || 14)) { startHowl(c); return; }
+  // a blinker that sees you a fair way off blinks ahead along its route
+  if (D.type === 'blinker' && c.state === 'chase' && c.saw && c.inChase && now > (c.blinkNext || 6) && dist > 5 && dist < 13 && c.path && c.path.length > 6) {
+    c.state = 'blinkup'; c.t = BLINK_T; c.blinkNext = now + 11; caption('a hum builds', c.x, c.y); sndBlink(true); return;
+  }
   // a charger winds up, then charges a long way in a straight line
   if (D.type === 'charger' && c.state === 'chase' && c.saw && now > (c.chargeNext || 0) && dist > 2.8 && dist < 7 && walkClear(c.x, c.y, r.x, r.y, 0.3)) {
     c.state = 'windup'; c.t = 0.55; c.chargeNext = now + 6; return;
@@ -1797,7 +1824,7 @@ function updateChaser(dt) {
         if (s1.type === 'window') {
           c.state = 'vault'; caption('window vault', sx, sy);
           c.vault = { fx: c.x, fy: c.y, tx: sx + (sx - tx) * 0.95, ty: sy + (sy - ty) * 0.95, p: 0 };
-        } else { c.state = 'break'; c.t = CFG.breakTime; c.target = s1; }
+        } else { c.state = 'break'; c.t = breakTimeNow(); c.target = s1; }
         return;
       }
     } else {
@@ -1821,7 +1848,7 @@ function updateChaser(dt) {
     const [nx, ny] = diagNormal(s), E = diagEnds(s), q = segClosest(c.x, c.y, E[0], E[1], E[2], E[3]);
     const here = (c.x - px) * nx + (c.y - py) * ny, there = (tx - px) * nx + (ty - py) * ny;
     if (here * there < 0 && Math.hypot(c.x - q[0], c.y - q[1]) < c.r + .32) {
-      c.state = 'break'; c.t = CFG.breakTime; c.target = s; c.face = Math.atan2(py - c.y, px - c.x); return;
+      c.state = 'break'; c.t = breakTimeNow(); c.target = s; c.face = Math.atan2(py - c.y, px - c.x); return;
     }
   }
   const dx = tx - c.x, dy = ty - c.y, l = Math.hypot(dx, dy);
@@ -3512,16 +3539,16 @@ function draw() {
   if ((visible || $('optAura').checked) && !noChaser && c.floor === vf) {
     ctx.globalAlpha = visible ? 1 : 0.4;
     const cMoving = (mode === 'play' || mode === 'replay') && (c.state === 'chase' || c.state === 'lunge' || c.state === 'cool' || c.state === 'vault' || c.state === 'carry');
-    drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : (c.state === 'lunge' || c.state === 'windup') ? PAL.lunge : PAL.chase,
+    drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : c.state === 'blinkup' ? '#9b7bff' : (c.state === 'lunge' || c.state === 'windup') ? PAL.lunge : PAL.chase,
                '#2a1513', cMoving ? now * (c.state === 'cool' ? 6 : 16) : null, true, c.state === 'lunge');
-    if (mode === 'play' && (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick' || c.state === 'opengate' || c.state === 'windup' || c.state === 'settrap' || c.state === 'check')) {
-      const full = c.state === 'settrap' ? 1.2 : c.state === 'check' ? 1.2 : c.state === 'windup' ? 0.55 : c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : c.state === 'kick' ? CFG.kickTime : c.state === 'opengate' ? CFG.chaserGateTime : CFG.hitCool;
+    if (mode === 'play' && (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick' || c.state === 'opengate' || c.state === 'windup' || c.state === 'settrap' || c.state === 'check' || c.state === 'howl' || c.state === 'blinkup')) {
+      const full = c.state === 'howl' ? HOWL_T : c.state === 'blinkup' ? BLINK_T : c.state === 'settrap' ? 1.2 : c.state === 'check' ? 1.2 : c.state === 'windup' ? 0.55 : c.state === 'break' ? breakTimeNow() : c.state === 'stun' ? stunTimeNow() : c.state === 'kick' ? CFG.kickTime : c.state === 'opengate' ? CFG.chaserGateTime : CFG.hitCool;
       ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .08; ctx.beginPath();
       ctx.arc(c.x, c.y, c.r + .2, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0, Math.min(1, c.t / full))); ctx.stroke();
     }
     ctx.globalAlpha = 1;
   }
-  drawCarried(vf);
+  drawCarried(vf); drawExtras14(vf);
   if (r.taken && (mode === 'play' || mode === 'replay')) drawClaw(r);
   // bushes and corn go on top so anyone inside looks hidden
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
@@ -4161,6 +4188,9 @@ function chaserProfile() {
   if (type === 'sprinter') { D.speed += 0.45; D.turn *= 0.5; D.slack += 0.25; }
   else if (type === 'charger') D.speed -= 0.3;
   else if (type === 'lurker') D.speed -= 0.1;
+  else if (type === 'tracker') D.speed -= 0.15;
+  else if (type === 'blinker') D.speed -= 0.1;
+  else if (type === 'brute') D.speed -= 0.05;
   D.speed += L * 0.03; D.turn += L * 0.4; D.trig += L * 0.015; D.fake = Math.min(0.8, D.fake + L * 0.03); D.bait = Math.min(0.8, D.bait + L * 0.03);
   return D;
 }
@@ -4231,6 +4261,8 @@ function replayEvents(show) {
     else if (e.k === 'trap') traps.push({ x: e.x, y: e.y, f: e.f, armed: true });
     else if (e.k === 'trapSpring' && traps[e.i]) traps[e.i].armed = false;
     else if (e.k === 'trapGone' && traps[e.i]) traps[e.i].gone = true;
+    else if (e.k === 'smoke') smokes.push({ x: e.x, y: e.y, f: e.f, t: e.t });
+    else if (show && e.k === 'puff') puffs.push({ x: e.x, y: e.y, f: e.f, t: e.t, big: e.big });
   }
   replay.applied = replay.t;
 }
@@ -4906,6 +4938,163 @@ $('edSym').addEventListener('change', e => {
 
 /* ---------- v1.3: runner abilities, trapper chaser, two players, lessons and challenges, medals, editor test-from-here,
    daily score codes, sound captions, touch layout, day-to-night ---------- */
+/* ---------- v1.4: more abilities (decoy, smoke, brace, hurdle) and more chaser types (tracker, blinker, howler, brute) ---------- */
+let smokes = [], puffs = [];
+const HOWL_T = 1.1, HOWL_R = 26, BLINK_T = 0.6, SMOKE_LIFE = 8, SMOKE_R = 2.2;
+const isBrute = () => !!CH && CH.type === 'brute';
+const breakTimeNow = () => CFG.breakTime * (isBrute() ? 0.35 : 1);
+const stunTimeNow = () => CFG.stunTime * (isBrute() ? 0.55 : 1);
+const chaserVaultNow = () => CFG.chaserVault * (isBrute() ? 1.35 : 1);
+const TYPE_HELP = {
+  trapper: '<b>Trapper:</b> while it hunts it sets traps you only spot up close. Step in one and you are stuck for a few seconds (mash the action button) while it comes running.',
+  tracker: '<b>Tracker:</b> a little slower, but it spots your scratch marks and blood from much further away, in every direction. Walk more, and break the trail.',
+  blinker: '<b>Blinker:</b> when it sees you a fair way off, it glows purple for a moment, then blinks several tiles ahead along its route. Break line of sight before it blinks, or turn as it does.',
+  howler: '<b>Howler:</b> while it hunts it stops to howl every 20 s or so. If you are within earshot and not hidden in a locker or bush when the howl ends, it knows where you are.',
+  brute: '<b>Brute:</b> smashes pallets in under a second and recovers from stuns quickly, but it is slow over windows. Loop windows rather than pallets.',
+};
+
+// a ring that spreads out and fades: a blink, a decoy landing
+function drawExtras14(vf) {
+  if (mode === 'menu' || mode === 'edit') return;
+  for (const p of puffs) {
+    if (p.f !== vf) continue;
+    const k = (now - p.t) / (p.big ? 1.0 : 0.5); if (k < 0 || k > 1) continue;
+    ctx.save(); ctx.globalAlpha = 1 - k; ctx.strokeStyle = p.big ? '#f0b648' : '#9b7bff'; ctx.lineWidth = .07;
+    ctx.beginPath(); ctx.arc(p.x, p.y, .3 + k * (p.big ? 1.6 : .9), 0, 7); ctx.stroke(); ctx.restore();
+  }
+  if (puffs.length > 30) puffs = puffs.filter(p => now - p.t < 1.2 && now >= p.t);
+  // the howl: rings rolling out from the chaser, heard through walls
+  const c = chaser;
+  if (c && c.state === 'howl' && c.floor === vf && !$('optNoChaser').checked) {
+    ctx.save(); ctx.strokeStyle = PAL.chase; ctx.lineWidth = .08;
+    for (let i = 0; i < 3; i++) {
+      const k = ((now * 1.4 + i / 3) % 1); ctx.globalAlpha = (1 - k) * .7;
+      ctx.beginPath(); ctx.arc(c.x, c.y, .5 + k * 4, 0, 7); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // a blinker about to blink: a shimmer round it
+  if (c && c.state === 'blinkup' && c.floor === vf && mode === 'play' && c.sees) {
+    ctx.save(); ctx.strokeStyle = '#9b7bff'; ctx.lineWidth = .06; ctx.setLineDash([.15, .12]); ctx.lineDashOffset = -now * 2;
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r + .3, 0, 7); ctx.stroke(); ctx.restore();
+  }
+  // smoke clouds: drawn over everyone, so you really can't see into them
+  for (const s of smokes) {
+    if (s.f !== vf) continue;
+    const a = smokeAmount(s); if (a <= 0) continue;
+    const R = SMOKE_R * smokeGrow(s);
+    for (let i = 0; i < 9; i++) {
+      const ang = i * 2.4 + (s.x * 3 + s.y) + (now - s.t) * 0.15 * (i % 2 ? 1 : -1), rr = i === 0 ? 0 : R * 0.55;
+      const px = s.x + Math.cos(ang) * rr, py = s.y + Math.sin(ang) * rr;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, R * 0.75);
+      g.addColorStop(0, 'rgba(176,184,188,' + (0.75 * a).toFixed(3) + ')'); g.addColorStop(1, 'rgba(176,184,188,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, R * 0.75, 0, 7); ctx.fill();
+    }
+  }
+}
+const smokeGrow = s => Math.max(0, Math.min(1, (now - s.t) / 0.5));
+const smokeAmount = s => { const age = now - s.t; return age < 0 || age > SMOKE_LIFE ? 0 : Math.min(1, (SMOKE_LIFE - age) / 1.2); };
+
+// Smoke: a cloud at your feet that hides anything in it, or behind it, from the chaser.
+function dropSmoke(r) {
+  const s = { x: r.x, y: r.y, f: r.floor, t: now };
+  smokes.push(s); smokes = smokes.filter(q => now - q.t < SMOKE_LIFE);
+  if (rec) rec.ev.push({ t: now, k: 'smoke', x: s.x, y: s.y, f: s.f });
+  sndSmoke(); caption('smoke hisses out', r.x, r.y);
+}
+function smokeBlocks(ax, ay, bx, by, f) {
+  for (const s of smokes) {
+    if (s.f !== f || smokeAmount(s) < 0.35) continue;
+    const R = SMOKE_R * 0.85 * smokeGrow(s); if (R < 0.3) continue;
+    const q = segClosest(s.x, s.y, ax, ay, bx, by);
+    if (Math.hypot(q[0] - s.x, q[1] - s.y) < R) return true;
+  }
+  return false;
+}
+
+// Decoy: throws something up to 8 tiles the way you face. The chaser, unless it can see you, goes to look.
+function throwDecoy(r) {
+  const ax = Math.cos(r.face), ay = Math.sin(r.face); let x = r.x, y = r.y;
+  for (let d = 0.5; d <= 8; d += 0.5) {
+    const nx = r.x + ax * d, ny = r.y + ay * d;
+    if (!walkClear(r.x, r.y, nx, ny, 0.12) || AIR[Math.floor(ny) * W + Math.floor(nx)]) break;
+    x = nx; y = ny;
+  }
+  puffs.push({ x, y, f: r.floor, t: now, big: true });
+  if (rec) rec.ev.push({ t: now, k: 'puff', x, y, f: r.floor, big: true });
+  if (snd.ctx && snd.on) sndVault();
+  caption('clatter', x, y);
+  const c = chaser;
+  if ($('optNoChaser').checked || !c || c.human || c.floor !== r.floor || c.saw || c.state === 'carry') return;
+  if (Math.hypot(c.x - x, c.y - y) > 24 * WX.hear) return;
+  c.kx = x; c.ky = y; c.kf = r.floor; c.kvia = -1; c.markT = now; c.repath = 0; c.poke = false;
+  c.lockerTarget = null; c.taskTarget = null;
+  if (c.inChase) { c.lastLeadT = now; c.onLead = true; }
+  stats.decoys = (stats.decoys || 0) + 1;
+  floatText(c.x, c.y - .9, '?', '#f0b648');
+}
+
+// Blinker: jumps up to 6 tiles along its route toward you, stopping short of you, stairs and anything in the way.
+function blinkJump(c, r) {
+  const N = W * H, cell = Math.floor(c.y) * W + Math.floor(c.x), here = c.floor * N + cell;
+  const path = r.floor === c.floor ? findPath(here, c.floor * N + Math.floor(r.y) * W + Math.floor(r.x), {}) : null;
+  if (!path || path.length < 3) return;
+  let k = 0;
+  for (let j = 1; j < Math.min(path.length, 7); j++) {
+    const fj = (path[j] / N) | 0, ij = path[j] - fj * N;
+    if (fj !== c.floor || blocking(spec[ij]) || STAIR[ij] || AIR[ij] || PBLOCK[ij]) break;
+    if (Math.hypot((ij % W) + .5 - r.x, ((ij / W) | 0) + .5 - r.y) < 4) break;   // it lands a few tiles short, so you still have a moment to react
+    k = j;
+  }
+  if (!k) return;
+  const ik = path[k] - c.floor * N, fx = c.x, fy = c.y;
+  c.x = (ik % W) + .5; c.y = ((ik / W) | 0) + .5; resolve(c);
+  for (const [x, y] of [[fx, fy], [c.x, c.y]]) {
+    puffs.push({ x, y, f: c.floor, t: now });
+    if (rec) rec.ev.push({ t: now, k: 'puff', x, y, f: c.floor });
+  }
+  sndBlink(false); stats.blinks = (stats.blinks || 0) + 1;
+}
+
+// Howler: stands still and howls. When the howl ends, anyone within earshot and not hidden is found.
+function startHowl(c) {
+  c.howlNext = now + 20 + Math.random() * 8; c.state = 'howl'; c.t = HOWL_T;
+  const r = runner;
+  if (r.floor === c.floor && Math.hypot(c.x - r.x, c.y - r.y) < 30) say('The howler is calling… hide!');
+  caption('a long howl', c.x, c.y); sndHowl();
+}
+function howlStep(c, r, dt, same, dist) {
+  if (c.saw) { c.state = 'chase'; return; }
+  c.t -= dt; if (c.t > 0) return;
+  c.state = 'chase';
+  if (same && dist < HOWL_R * WX.hear && !r.hidden && !r.bushHide && !r.carried && !r.hooked) {
+    c.kx = r.x; c.ky = r.y; c.kf = r.floor; c.kvia = -1; c.markT = now; c.lastLeadT = now; c.onLead = true; c.repath = 0;
+    c.lockerTarget = null; c.taskTarget = null;
+    floatText(r.x, r.y - 1.1, 'found!', '#e2503f'); say('The howl found you!'); stats.howlFound = (stats.howlFound || 0) + 1;
+  } else if (same && dist < HOWL_R * WX.hear) { say('The howl missed you — you were hidden'); stats.howlHid = (stats.howlHid || 0) + 1; }
+}
+
+// sounds
+function sndHowl() {
+  const c = snd.ctx; if (!c || !snd.on) return;
+  const t = c.currentTime;
+  sndNote(t, 'triangle', 170, HOWL_T, 0.22, 0.35, snd.master, 330);
+  sndNote(t, 'sawtooth', 85, HOWL_T, 0.06, 0.4, snd.master, 160);
+}
+function sndBlink(charge) {
+  const c = snd.ctx; if (!c || !snd.on) return;
+  const t = c.currentTime;
+  if (charge) sndNote(t, 'sine', 220, BLINK_T, 0.12, 0.3, snd.master, 660);
+  else sndNote(t, 'sine', 1200, 0.22, 0.18, 0.005, snd.master, 240);
+}
+function sndSmoke() {
+  const c = snd.ctx; if (!c || !snd.on) return;
+  const t = c.currentTime, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = snd.bright; s.loop = true; f.type = 'highpass'; f.frequency.value = 2500;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+  s.connect(f); f.connect(g); g.connect(snd.master); s.start(t); s.stop(t + 1);
+}
+
 let abilityPressed = false, p2Attack = false, traps = [], caps = [], wxDusk = false, wxDuskSaid = 0, testStart = null, testArm = 0, goalEscaped = false;
 const duskK = t => Math.max(0, Math.min(1, (t - 20) / 180));   // 0 in daylight, 1 once night has fallen (after about 3 minutes)
 const twoOn = () => mode === 'play' && !!chaser && !!chaser.human;
@@ -4918,13 +5107,17 @@ const ABIL = {
   burst: { name: 'Sprint burst', dur: 3, cd: 40 },
   sidestep: { name: 'Sidestep', dur: 0.18, cd: 12 },
   silent: { name: 'Silent', dur: 6, cd: 35 },
+  decoy: { name: 'Decoy', dur: 0, cd: 30, instant: true },
+  smoke: { name: 'Smoke', dur: 0, cd: 40, instant: true },
+  brace: { name: 'Brace', dur: 2, cd: 45 },
+  hurdle: { name: 'Hurdle', dur: 10, cd: 40 },
 };
 const silentNow = () => !!runner && runner.ability === 'silent' && runner.abT > 0;
 function abilityTick(r, dt) {
   if (r.abCD > 0) r.abCD = Math.max(0, r.abCD - dt);
   if (r.abT > 0) {
     r.abT -= dt;
-    if (r.abT <= 0) { r.abT = 0; if (r.ability !== 'sidestep') floatText(r.x, r.y - .8, ABIL[r.ability].name.toLowerCase() + ' over', '#8a9a98'); }
+    if (r.abT <= 0) { r.abT = 0; if (r.ability !== 'sidestep' && ABIL[r.ability] && !ABIL[r.ability].instant) floatText(r.x, r.y - .8, ABIL[r.ability].name.toLowerCase() + ' over', '#8a9a98'); }
   }
   if (!abilityPressed) return;
   abilityPressed = false;
@@ -4936,6 +5129,8 @@ function abilityTick(r, dt) {
     let [dx, dy] = inputDir(); if (!dx && !dy) { dx = Math.cos(r.face); dy = Math.sin(r.face); }
     r.dash = { dx, dy, t: 0.18 };
   }
+  if (r.ability === 'decoy') throwDecoy(r);
+  if (r.ability === 'smoke') dropSmoke(r);
   floatText(r.x, r.y - .8, A.name.toLowerCase(), '#b9b0ff');
   if (rec) rec.ev.push({ t: now, k: 'fx', x: r.x, y: r.y - .8, txt: A.name.toLowerCase(), col: '#b9b0ff' });
 }
@@ -5057,7 +5252,7 @@ function humanChaser(dt, D) {
   if (c.state === 'stun') { c.t -= dt; if (c.t <= 0) c.state = 'chase'; return; }
   if (c.state === 'break') { c.t -= dt; if (c.t <= 0) { c.target.state = 'broken'; c.state = 'chase'; c.chaseT = 0; stats.breaks++; } return; }
   if (c.state === 'vault') {
-    const v = c.vault; v.p += dt / CFG.chaserVault; const p = Math.min(1, v.p);
+    const v = c.vault; v.p += dt / chaserVaultNow(); const p = Math.min(1, v.p);
     c.x = v.fx + (v.tx - v.fx) * p; c.y = v.fy + (v.ty - v.fy) * p;
     if (v.p >= 1) { c.state = 'chase'; c.vault = null; }
     return;
@@ -5093,7 +5288,7 @@ function humanChaser(dt, D) {
       const al = s.axis === 'x' ? c.x - sx : c.y - sy, side = -(Math.sign(al) || 1) * 0.95;
       c.state = 'vault'; c.vault = { fx: c.x, fy: c.y, tx: s.axis === 'x' ? sx + side : sx, ty: s.axis === 'x' ? sy : sy + side, p: 0 }; return;
     }
-    if (s && s.type === 'pallet') { c.state = 'break'; c.t = CFG.breakTime; c.target = s; return; }
+    if (s && s.type === 'pallet') { c.state = 'break'; c.t = breakTimeNow(); c.target = s; return; }
     if (s && s.type === 'locker') { c.state = 'check'; c.t = 1.2; c.lockerTarget = s; return; }
     c.state = 'lunge'; c.t = CFG.lungeTime; return;
   }
@@ -5237,7 +5432,7 @@ function menuExtras2() {
       'With a controller plugged in, the controller is the chaser (stick and ' + (PAD_NAMES[PADK.act] || 'A') + ') and the runner has the whole keyboard.');
   if ($('optAbility').value !== 'none')
     out.push('<b>Ability:</b> ' + $('optAbility').selectedOptions[0].textContent + '. Press ' + keyLabel(KB.ability[0]) + ', ' + (PAD_NAMES[PADK.ability] || 'B') + ' on a controller, or SKILL on a touchscreen.');
-  if ($('optType').value === 'trapper') out.push('<b>Trapper:</b> while it hunts it sets traps you only spot up close. Step in one and you are stuck for a few seconds (mash the action button) while it comes running.');
+  const th = TYPE_HELP[$('optType').value]; if (th) out.push(th);
   if ($('optDusk').checked) out.push('Daylight fades to night over about three minutes.');
   return out;
 }
@@ -5311,7 +5506,7 @@ function extrasHud() {
   $('hAbBox').classList.toggle('hide', !on);
   if (on) {
     $('hAbName').textContent = A.name;
-    $('hAb').textContent = r.abT > 0 && r.ability !== 'sidestep' ? 'active' : r.abCD > 0 ? Math.ceil(r.abCD) + ' s' : 'ready';
+    $('hAb').textContent = r.abT > 0 && r.ability !== 'sidestep' && !A.instant ? 'active' : r.abCD > 0 ? Math.ceil(r.abCD) + ' s' : 'ready';
     $('tAb').classList.toggle('wait', r.abCD > 0);
   }
   const m = MAPS[mapIdx], g = !!m.goal && mode !== 'menu' && goalOn();

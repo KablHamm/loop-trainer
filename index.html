@@ -170,19 +170,37 @@
   .prog { max-height: 60vh; overflow-y: auto; }
   .prog .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px dashed var(--line); padding: 6px 0; }
   .prog .row small { color: var(--dim); display: block; }
+  /* v1.3: medals, drill groups, touch layout, ability button */
+  .medal { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35); }
+  .medal.m1 { background: #c08a55; } .medal.m2 { background: #c9d2d4; } .medal.m3 { background: #f0c040; }
+  .medal.big { width: 16px; height: 16px; vertical-align: -3px; }
+  .dhead { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 10px 0 4px; }
+  .drill.locked { opacity: .55; }
+  .goals { margin: 8px 0; } .goals div { padding: 2px 0; } .goals .ok { color: var(--teal); } .goals .bad { color: var(--red); }
+  .shelf { display: flex; gap: 14px; margin: 6px 0 10px; font-size: 14px; }
+  #scoreName { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 150px; }
+  #touch { --ts: 1; }
+  #tAct { width: calc(96px * var(--ts)); height: calc(96px * var(--ts)); font-size: calc(13px * var(--ts)); }
+  #tRun { right: calc(32px + 100px * var(--ts)); width: calc(68px * var(--ts)); height: calc(68px * var(--ts)); font-size: calc(12px * var(--ts)); }
+  #tAb { right: calc(36px + 8px * var(--ts)); bottom: calc(40px + 96px * var(--ts)); width: calc(64px * var(--ts)); height: calc(64px * var(--ts)); font-size: calc(11px * var(--ts)); border-color: #9a8cff !important; color: #b9b0ff !important; }
+  #tAb.wait { opacity: .4; }
+  #touch.swap #stickZone { left: auto; right: 0; }
+  #touch.swap #tAct { right: auto; left: 22px; }
+  #touch.swap #tRun { right: auto; left: calc(32px + 100px * var(--ts)); }
+  #touch.swap #tAb { right: auto; left: calc(36px + 8px * var(--ts)); }
 </style>
 </head>
 <body>
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.2</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.3</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
     <div id="drills"></div>
     <div id="drillBtns"></div>
-    <div id="codeBox" class="hide"><textarea id="codeIn" placeholder="Paste a drill code here" spellcheck="false"></textarea><button class="smallbtn" id="codeGo">Add this drill</button></div>
+    <div id="codeBox" class="hide"><textarea id="codeIn" placeholder="Paste a drill code or score code here" spellcheck="false"></textarea><button class="smallbtn" id="codeGo">Add</button></div>
 
     <h2>Chaser</h2>
     <div class="seg" id="diff">
@@ -195,8 +213,10 @@
       <option value="sprinter">Sprinter: fast, corners badly</option>
       <option value="charger">Charger: slower, charges at you</option>
       <option value="lurker">Lurker: hard to see until close</option>
+      <option value="trapper">Trapper: lays hidden traps</option>
     </select></label>
     <label class="chk"><input type="checkbox" id="optAdapt"> Adaptive: improves as you win <span id="adaptLvl" style="color:var(--dim)"></span></label>
+    <label class="chk"><input type="checkbox" id="optTwo"> Two players: a second player is the chaser</label>
 
     <h2>Training aids</h2>
     <label class="chk"><input type="checkbox" id="optAura"> See chaser through walls</label>
@@ -208,6 +228,12 @@
     <h2>Round</h2>
     <label class="chk"><input type="checkbox" id="optHook"> Carried to a hook when caught</label>
     <label class="chk"><input type="checkbox" id="optBlood"> Injured: blood trail and pained noises</label>
+    <label class="row">Ability <select id="optAbility">
+      <option value="none">None</option>
+      <option value="burst">Sprint burst: 3 s of speed (40 s recharge)</option>
+      <option value="sidestep">Sidestep: a quick dash (12 s recharge)</option>
+      <option value="silent">Silent: no tracks or noise for 6 s (35 s recharge)</option>
+    </select></label>
     <label class="row">Weather <select id="optWeather">
       <option value="clear">Clear</option>
       <option value="rain">Rain: tracks wash away, quieter</option>
@@ -217,11 +243,15 @@
       <option value="storm">Thunderstorm: lightning shows you, thunder hides noise</option>
       <option value="dynamic">Changing: shifts during the run</option>
     </select></label>
+    <label class="chk"><input type="checkbox" id="optDusk"> Day turns to night over 3 minutes</label>
 
     <h2>Display &amp; comfort</h2>
     <label class="chk"><input type="checkbox" id="optMini"> Minimap on big maps</label>
     <label class="chk"><input type="checkbox" id="optCB"> Colourblind-friendly colours</label>
     <label class="chk"><input type="checkbox" id="optVib"> Vibrate when hit (phone or controller)</label>
+    <label class="chk"><input type="checkbox" id="optCaps"> Sound captions: show what you hear and where</label>
+    <label class="chk">Touch button size <input type="range" id="optTouchSize" min="70" max="160" value="100" style="flex:1"></label>
+    <label class="chk"><input type="checkbox" id="optTouchSwap"> Touch: buttons on the left, stick on the right</label>
 
     <h2>Sound</h2>
     <label class="chk"><input type="checkbox" id="optSound"> Ambient sound and chase music</label>
@@ -281,6 +311,8 @@
       <div class="stat"><span class="k">Momentum</span><span class="pips" id="hMo"></span></div>
       <div class="stat hide" id="hTaskBox"><span class="k">Tasks</span><span class="v" id="hTasks">0/0</span></div>
       <div class="stat hide" id="hEndBox"><span class="k">Collapse <b id="hEndSecs"></b></span><span class="endbar"><i id="hEndBar"></i></span></div>
+      <div class="stat hide" id="hAbBox"><span class="k" id="hAbName">Ability</span><span class="v" id="hAb">ready</span></div>
+      <div class="stat hide" id="hGoalBox"><span class="k">Goal</span><span class="v" id="hGoal"></span></div>
       <div class="stat"><span class="k">Best</span><span class="v" id="hBest">–</span></div>
       <div id="msg"></div>
     </div>
@@ -333,6 +365,7 @@
       <button id="edOutClear" class="hide">Clear outline</button>
       <button id="edClear">Clear</button>
       <button id="edTest" class="primary">Test run</button>
+      <button id="edTestHere" title="Click where you start, then where the chaser starts">Test from here</button>
       <button id="edDone">Done</button>
       <div class="hint" id="edMsg"></div>
       <div class="hint"><b>Paint:</b> left-drag paints, right-drag erases; windows and pallets go in a one-tile gap in a wall.
@@ -346,6 +379,7 @@
         <div id="stickBase" class="hide"><div id="stickKnob"></div></div>
         <button id="tRun" class="on">RUN</button>
         <button id="tAct">ACTION</button>
+        <button id="tAb" class="hide">SKILL</button>
       </div>
       <div id="replayBar" class="hide">
         <button id="rpPlay">Pause</button>
@@ -756,8 +790,9 @@ function loadMap() {
 
   runner = { x: rs[0], y: rs[1], r: 0.3, hp: 2, boost: 0, face: 0, vault: null,
              lastDx: 0, lastDy: 0, headT: 0, vx: 0, vy: 0, running: false, lastRunT: -9, markDist: 0,
-             hidden: null, hideFrom: null, slowT: 0, hill: 0, onRamp: false, carried: null, hooked: null, bloodDist: 0, groanNext: 0 };
-  marks = []; blood = []; selSet.clear();
+             hidden: null, hideFrom: null, slowT: 0, hill: 0, onRamp: false, carried: null, hooked: null, bloodDist: 0, groanNext: 0,
+             ability: $('optAbility').value === 'none' ? null : $('optAbility').value, abT: 0, abCD: 0, dash: null, trapT: 0, noisyT: -9, noisyR: 0 };
+  marks = []; blood = []; traps = []; caps = []; selSet.clear();
   chaser = { x: cs[0], y: cs[1], r: 0.36, state: 'chase', t: 0, face: Math.PI, dx: 0, dy: 0,
              path: null, repath: 0, cell: -1, prevCell: -1, chaseT: 0, fakeUntil: -9, fakeCell: -1,
              sees: true, target: null, vault: null, tier: 0,
@@ -1107,17 +1142,18 @@ const touch = { x: 0, y: 0, act: false, run: true, id: null, ox: 0, oy: 0 };
 let lastSrc = 'key';
 function inputDir() {
   let x = 0, y = 0;
-  if (kbHas('left')) x--;
-  if (kbHas('right')) x++;
-  if (kbHas('up')) y--;
-  if (kbHas('down')) y++;
+  const has = a => twoSplit() ? KB[a].some(k => keys.has(k) && !/^Arrow/.test(k)) : kbHas(a);   // two players on one keyboard: the arrows belong to the chaser
+  if (has('left')) x--;
+  if (has('right')) x++;
+  if (has('up')) y--;
+  if (has('down')) y++;
   const l = Math.hypot(x, y);
   if (l) { lastSrc = 'key'; return [x / l, y / l]; }
-  if (pad.x || pad.y) { lastSrc = 'pad'; return [pad.x, pad.y]; }
+  if ((pad.x || pad.y) && !twoPad()) { lastSrc = 'pad'; return [pad.x, pad.y]; }
   if (touch.x || touch.y) { lastSrc = 'touch'; return [touch.x, touch.y]; }
   return [0, 0];
 }
-const actionHeld = () => kbHas('act') || pad.a || touch.act;
+const actionHeld = () => kbHas('act') || (pad.a && !twoPad()) || touch.act;
 function pollPad() {
   // Read every connected pad and combine them: some PCs list a second, idle device ahead of the real controller.
   let pads = [], blocked = false;
@@ -1152,7 +1188,8 @@ function pollPad() {
     pad.a = wasA; pad.start = wasStart; return;
   }
   if (mode === 'edit') return;
-  if (pad.a && !wasA) { lastSrc = 'pad'; if (mode === 'play') spacePressed = true; else startRun(); }
+  if (pad.a && !wasA) { if (twoPad()) p2Attack = true; else { lastSrc = 'pad'; if (mode === 'play') spacePressed = true; else startRun(); } }
+  if (mode === 'play' && !twoPad() && PADK.ability !== PADK.act && fresh.includes(PADK.ability)) abilityPressed = true;
   if (pad.start && !wasStart) startRun();
 }
 
@@ -1251,12 +1288,12 @@ function dropPallet(s) {
 function startRunnerVault(a) {
   const s = a.s, cx = s.x + .5, cy = s.y + .5;
   const fast = runner.running && a.toward > 0.85 && runner.headT >= 0.28;
-  if (runner.running) runner.lastRunT = now + (fast ? CFG.fastVault : CFG.slowVault);
+  if (runner.running && !silentNow()) runner.lastRunT = now + (fast ? CFG.fastVault : CFG.slowVault);
   const side = -Math.sign(a.al) * 0.9;
   runner.vault = { fx: runner.x, fy: runner.y,
     tx: a.tx !== undefined ? a.tx : s.axis === 'x' ? cx + side : cx, ty: a.ty !== undefined ? a.ty : s.axis === 'x' ? cy : cy + side,   // a diagonal pallet supplies its own landing spot
     p: 0, dur: fast ? CFG.fastVault : CFG.slowVault };
-  if (runner.running) {
+  if (runner.running && !silentNow()) {
     // Vaulting at a run is noisy. If the chaser is on this floor and within earshot it heads for where you land,
     // whether or not it could see you. A walked vault is silent.
     sndVault(); stats.loudVaults++;
@@ -1302,6 +1339,7 @@ function leaveLocker() {
 function updateRunner(dt) {
   const r = runner;
   if (r.carried || r.hooked) { carriedRunner(dt); return; }
+  abilityTick(r, dt);
   if (r.boost > 0) r.boost -= dt;
   if (r.slowT > 0) r.slowT -= dt;
   if (r.hidden) {                     // inside a locker: no moving until you step out
@@ -1316,8 +1354,13 @@ function updateRunner(dt) {
     if (v.p >= 1) { r.vault = null; if (trainer && trainer.vault) trainerVaultLanded(); }
     return;
   }
+  if (r.trapT > 0) { trappedTick(r, dt); return; }        // caught in a trap: mash the action button to get out sooner
+  if (r.dash) {                                           // sidestep: a short, fast dash
+    const st = Math.min(dt, r.dash.t); r.x += r.dash.dx * 9 * st; r.y += r.dash.dy * 9 * st; r.dash.t -= dt;
+    resolve(r); floorCheck(r, 0.35); if (r.dash.t <= 0) r.dash = null; return;
+  }
   const [dx, dy] = inputDir();
-  const shift = kbHas('run') || pad.run;
+  const shift = kbHas('run') || (pad.run && !twoPad());
   // touch has its own Run/Walk toggle; keyboard and controller use the Shift / shoulder-button rule
   r.running = !!(dx || dy) && (lastSrc === 'touch' ? touch.run : ($('optShiftRun').checked ? shift : !shift));
   if (dx || dy) {
@@ -1360,7 +1403,9 @@ function updateRunner(dt) {
     }
   }
   const gHere = groundAt(r.x, r.y);
-  const sp = (!r.running ? CFG.walkSpeed : r.boost > 0 ? CFG.boostSpeed : CFG.runnerSpeed) * (GROUND_SPEED[gHere] || 1) * (r.slowT > 0 ? 0.45 : 1);
+  const burst = r.ability === 'burst' && r.abT > 0 && (dx || dy);
+  if (burst) r.running = true;
+  const sp = (!r.running ? CFG.walkSpeed : r.boost > 0 || burst ? CFG.boostSpeed : CFG.runnerSpeed) * (GROUND_SPEED[gHere] || 1) * (r.slowT > 0 ? 0.45 : 1);
   r.vx = dx * sp; r.vy = dy * sp;
   r.x += r.vx * dt; r.y += r.vy * dt;
   resolve(r);
@@ -1381,8 +1426,11 @@ function updateRunner(dt) {
   if (EXITL[Math.floor(r.y) * W + Math.floor(r.x)] && allSpecials().some(s => s.type === 'gate' && s.state === 'open')) { endRun('gate'); return; }
   // running leaves scratch marks and walking leaves nothing, except that
   // snow shows your footprints even at a walk and water washes all tracks away
-  if (r.running) r.lastRunT = now;
-  if (gHere !== 'w' && !inBush && (r.running || (gHere === 's' && (dx || dy)))) {   // and no marks show inside a bush
+  const quiet = silentNow();                               // the Silent ability: no tracks and no noise while it lasts
+  if (r.running && !quiet) r.lastRunT = now;
+  if (r.running && !quiet && GROUND_NOISE[gHere]) { r.noisyT = now; r.noisyR = GROUND_NOISE[gHere]; }   // gravel crunches, water splashes
+  trapCheck(r);
+  if (!quiet && gHere !== 'w' && !inBush && (r.running || (gHere === 's' && (dx || dy)))) {   // and no marks show inside a bush
     r.markDist += sp * dt;
     if (r.markDist >= CFG.markGap) {
       r.markDist = 0;
@@ -1462,6 +1510,7 @@ function pickSearch(c, local) {
 function updateChaser(dt) {
   const c = chaser, r = runner, D = CH || DIFF[diffKey];
   if (c.state === 'carry') { carryStep(dt, D); return; }
+  if (c.human) { humanChaser(dt, D); return; }            // two players: the second player drives it
   const dist = Math.hypot(r.x - c.x, r.y - c.y), same = r.floor === c.floor;   // on different floors it can neither see nor reach you
   c.sees = same && los(c.x, c.y, r.x, r.y) && !(r.bushHide && !(dist <= 0.45 || (c.poke && dist <= 0.8)));   // hidden in a bush unless it bumps right into you, or is searching that bush
   if (same) stats.closest = Math.min(stats.closest, dist);
@@ -1476,8 +1525,10 @@ function updateChaser(dt) {
   let lead = c.saw;
   // Once a chase is on, it can also hear you running close by, so it can cut you off round a loop.
   const heard = same && c.inChase && dist < 9 * WX.hear && now - r.lastRunT < 0.3 && !r.bushHide;   // a bush you are hidden in muffles your footsteps
+  const loud = same && now - (r.noisyT || -9) < 0.3 && dist < (r.noisyR || 0) * WX.hear && !r.bushHide;   // running on gravel or through water carries further, chase or not
+  if (loud && !c.inChase && !c.saw && now > (c.heardSaid || 0)) { c.heardSaid = now + 3; floatText(r.x, r.y - 1.1, 'heard!', '#e2503f'); }
   if (c.saw) c.lastSawT = now;
-  if (c.saw || heard) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; c.leadKind = 'sight'; }
+  if (c.saw || heard || loud) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; c.leadKind = 'sight'; }
   else {
     let best = null;
     for (const m of marks) {
@@ -1508,8 +1559,8 @@ function updateChaser(dt) {
   // then for 2 s of looking around once it gets there with nothing new to go on.
   const was = c.inChase;
   c.inChase = c.onLead ? now - c.lastLeadT < 8 : now - Math.max(c.lastLeadT, c.arriveT) < 2;
-  if (c.inChase && !was) { say('Chase!'); stats.chases++; }
-  if (!c.inChase && was) { say('The chaser lost you'); stats.lost++; c.chaseT = 0; }
+  if (c.inChase && !was) { say('Chase!'); stats.chases++; caption('chase music starts'); }
+  if (!c.inChase && was) { say('The chaser lost you'); stats.lost++; c.chaseT = 0; caption('chase music fades'); }
   if (c.inChase) stats.chase += dt;
   c.tracked = c.inChase;
   if (c.slowT > 0) c.slowT -= dt;
@@ -1546,7 +1597,7 @@ function updateChaser(dt) {
   if (c.gateTarget) {
     const Gt = c.gateTarget, dl = Math.hypot(c.x - Gt.x - .5, c.y - Gt.y - .5);
     if (lead || Gt.state === 'open' || endStart >= 0 || Math.hypot(c.kx - c.gatePt[0], c.ky - c.gatePt[1]) > 0.1) { c.gateTarget = null; c.gateRetryT = now + 8; }
-    else if (dl < 1.6 && c.state === 'chase') { c.state = 'opengate'; c.t = CFG.chaserGateTime; c.face = Math.atan2(Gt.y + .5 - c.y, Gt.x + .5 - c.x); }
+    else if (dl < 1.6 && c.state === 'chase') { c.state = 'opengate'; c.t = CFG.chaserGateTime; c.face = Math.atan2(Gt.y + .5 - c.y, Gt.x + .5 - c.x); if (Math.hypot(c.x - r.x, c.y - r.y) < 24) caption('gate grinding open', Gt.x + .5, Gt.y + .5); }
   } else if (!lead && !c.inChase && !c.lockerTarget && !c.taskTarget && c.state === 'chase' && endStart < 0 && now > (c.gateRetryT || 0) && tasksAllDone()) {
     let Gt = null, bd = 1e9;
     for (const s of specials) { if (!((s.type === 'gate' && !s.group) || s.type === 'switch') || s.state === 'open' || !s.found) continue; const d = Math.hypot(c.x - s.x - .5, c.y - s.y - .5); if (d < bd) { bd = d; Gt = s; } }
@@ -1569,6 +1620,10 @@ function updateChaser(dt) {
       }
       return;
     }
+  }
+  if (c.state === 'settrap') {          // a trapper setting a trap; it gives up if it spots you
+    if (c.saw) c.state = 'chase';
+    else { c.t -= dt; if (c.t <= 0) { placeTrap(c); c.state = 'chase'; } return; }
   }
   if (c.state === 'kick') {             // damaging a task box
     c.t -= dt;
@@ -1642,7 +1697,7 @@ function updateChaser(dt) {
   }
   if (c.state === 'break') {
     c.t -= dt;
-    if (c.t <= 0) { c.target.state = 'broken'; c.state = 'chase'; c.chaseT = 0; c.path = null; stats.breaks++; }
+    if (c.t <= 0) { c.target.state = 'broken'; c.state = 'chase'; c.chaseT = 0; c.path = null; stats.breaks++; caption('pallet smashed', c.target.x + .5, c.target.y + .5); }
     return;
   }
   if (c.state === 'vault') {
@@ -1688,6 +1743,8 @@ function updateChaser(dt) {
       }
     }
   }
+  // a trapper sets traps along its patrol while it has no idea where you are
+  if (D.type === 'trapper' && c.state === 'chase' && !c.inChase && !lead && trapperWants(c)) { c.state = 'settrap'; c.t = 1.2; return; }
   // a charger winds up, then charges a long way in a straight line
   if (D.type === 'charger' && c.state === 'chase' && c.saw && now > (c.chargeNext || 0) && dist > 2.8 && dist < 7 && walkClear(c.x, c.y, r.x, r.y, 0.3)) {
     c.state = 'windup'; c.t = 0.55; c.chargeNext = now + 6; return;
@@ -1738,7 +1795,7 @@ function updateChaser(dt) {
         const sx = s1.x + .5, sy = s1.y + .5;
         c.face = Math.atan2(sy - c.y, sx - c.x);
         if (s1.type === 'window') {
-          c.state = 'vault';
+          c.state = 'vault'; caption('window vault', sx, sy);
           c.vault = { fx: c.x, fy: c.y, tx: sx + (sx - tx) * 0.95, ty: sy + (sy - ty) * 0.95, p: 0 };
         } else { c.state = 'break'; c.t = CFG.breakTime; c.target = s1; }
         return;
@@ -1818,16 +1875,17 @@ function update(dt) {
     if (rec) rec.ev.push({ t: now, k: 'claw' });
   }
   if (mode === 'play') { extrasTick(dt); recTick(); }
-  spacePressed = false;
+  spacePressed = false; abilityPressed = false; p2Attack = false;
 }
 
 function endRun(escapedBy) {
   mode = 'over';
   recEnd(); closeLoop();
   if (escapedBy === 'trainer') { trainerCard(); return; }
+  if (goalOn() && goalCard(escapedBy)) return;            // lessons and challenges have their own results card
   const taken = escapedBy === 'claw'; if (taken) escapedBy = null;
   const hooked = escapedBy === 'hooked'; if (hooked) escapedBy = null;
-  const t = stats.chase, prev = getBest(mapIdx, diffKey), isBest = t > prev && !trainer;
+  const t = stats.chase, prev = getBest(mapIdx, diffKey), isBest = t > prev && !trainer && !chaser.human;
   if (isBest) store(bestKey(mapIdx, diffKey), t.toFixed(1));
   const hist = pushHistory(t, !!escapedBy), adaptMsg = adaptUpdate(t, !!escapedBy);
   const rank = t < 20 ? 'Caught quick' : t < 45 ? 'Getting there' : t < 90 ? 'Solid runner'
@@ -1848,8 +1906,8 @@ function endRun(escapedBy) {
   if (!tips.length) tips.push(t < 30 ? 'Stay on one loop and focus only on cutting corners tight. Turn on "See chaser through walls" until the rhythm clicks.'
                                      : 'Clean run. Try the next difficulty, or turn the training aids off.');
   $('card').innerHTML =
-    '<h3>' + (escapedBy ? 'Escaped!' : taken ? 'Taken' : hooked ? 'Hooked' : 'Caught') + (isBest ? ' — new best!' : '') + '</h3>' +
-    '<div class="big">' + t.toFixed(1) + 's</div><div class="rank">in chase — ' + rank + '</div>' +
+    '<h3>' + (chaser.human ? (escapedBy ? 'The runner escapes!' : 'The chaser wins') : escapedBy ? 'Escaped!' : taken ? 'Taken' : hooked ? 'Hooked' : 'Caught') + (isBest ? ' — new best!' : '') + '</h3>' +
+    '<div class="big">' + t.toFixed(1) + 's</div><div class="rank">in chase — ' + rank + '</div>' + medalLine(t) + dailyLine() +
     '<div class="grid">' +
     '<div>Total time alive <b>' + stats.time.toFixed(1) + 's</b></div><div>Times you lost the chaser <b>' + stats.lost + '</b></div>' +
     '<div>Pallet stuns <b>' + stats.stuns + '</b></div><div>Pallets dropped <b>' + stats.drops + '</b></div>' +
@@ -1872,7 +1930,8 @@ const setCh = (s, i, ch) => s.substring(0, i) + ch + s.substring(i + 1);
 let tool = '#', painting = 0, hover = null, delArmed = false;
 /* Ground layer: one letter per tile, stored beside the drill's rows. '.' is plain floor. */
 const GROUNDS = { m: 'Wet mud (slow)', d: 'Dry mud', s: 'Snow (shows footprints)', g: 'Grass', c: 'Corn (hides you)',
-                  a: 'Sand', w: 'Shallow water (slow, no tracks)', p: 'Paving stones', f: 'Wooden floor', l: 'Fallen leaves' };
+                  a: 'Sand', w: 'Shallow water (slow, splashy, no tracks)', p: 'Paving stones', f: 'Wooden floor', l: 'Fallen leaves', v: 'Gravel (loud to run on)' };
+const GROUND_NOISE = { v: 13, w: 9 };   // running here can be heard this many tiles away, chase or not
 const GROUND_SPEED = { m: 0.8, s: 0.9, c: 0.88, a: 0.93, w: 0.7 };   // how much each slows you and the chaser
 // the ground rows for a drill, made to match the size of its rows
 function groundRows(m) {
@@ -2319,7 +2378,7 @@ function randomDrill(daily) {
     // ground: one kind all over, with a few patches of something else
     const base = pick(['g', 'g', 'd', 'm', 's', 'a']), gr = []; for (let y = 0; y < h; y++) gr.push(new Array(w).fill(base));
     for (let k = 2 + rnd(5); k > 0; k--) {
-      const kind = pick(['c', 'l', 'l', 'w', 'd', 'g', 'm'].filter(q => q !== base)), cx = rnd(w), cy = rnd(h), rx = 3 + rnd(6), ry = 2 + rnd(5);
+      const kind = pick(['c', 'l', 'l', 'w', 'd', 'g', 'm', 'v'].filter(q => q !== base)), cx = rnd(w), cy = rnd(h), rx = 3 + rnd(6), ry = 2 + rnd(5);
       for (let y = Math.max(0, cy - ry); y <= Math.min(h - 1, cy + ry); y++) for (let x = Math.max(0, cx - rx); x <= Math.min(w - 1, cx + rx); x++)
         if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1 + (Math.random() - .5) * .35) gr[y][x] = kind;
     }
@@ -2764,6 +2823,7 @@ function resizeDrill() {
 }
 
 function showMenu() {
+  testStart = null; testArm = 0;
   leaveWorkspace(); settleFloors(); mode = 'menu'; loadMap(); setBars(false); $('replayBar').classList.add('hide'); replay = null;
   $('card').innerHTML = '<h3>' + esc(MAPS[mapIdx].name) + '</h3>' +
     '<div class="coach">You are the <b style="color:' + PAL.run + '">' + PAL.name + '</b> dot. The chaser is faster than you in a straight line — ' +
@@ -2776,10 +2836,12 @@ function showMenu() {
   updateHud();
 }
 function startRun() {
+  if (lessonLocked(MAPS[mapIdx])) { showMenu(); return; }
   leaveWorkspace(); settleFloors(); mode = 'play'; replay = null; $('replayBar').classList.add('hide');
-  wxPlan = makeWxPlan($('optWeather').value); wxBolts = makeBolts(); wxSaid = 0; wxThunderI = 0; wxAt(0); loadMap(); setBars(false); buildDrills();
-  $('overlay').classList.add('hide');
-  say($('optNoChaser').checked ? 'Exploring: the chaser is switched off' : 'The chaser is hunting for you');
+  wxPlan = makeWxPlan($('optWeather').value); wxBolts = makeBolts(); wxDusk = $('optDusk').checked; wxSaid = 0; wxThunderI = 0; wxDuskSaid = 0; wxAt(0); loadMap(); applyTestStart(); setBars(false); buildDrills();
+  chaser.human = $('optTwo').checked && !$('optNoChaser').checked && !MAPS[mapIdx].trainer;
+  $('overlay').classList.add('hide'); $('tAb').classList.toggle('hide', !runner.ability);
+  say($('optNoChaser').checked ? 'Exploring: the chaser is switched off' : chaser.human ? 'Two players: the chaser is hunting' : 'The chaser is hunting for you');
   recStart(); trainerStart();
 }
 
@@ -2799,6 +2861,7 @@ function updateHud() {
   $('hMo').innerHTML = [0, 1, 2].map(i => '<span class="pip mo' + (i < chaser.tier ? ' on' : '') + '"></span>').join('');
   $('hDist').textContent = $('optNoChaser').checked ? 'off' : Math.hypot(runner.x - chaser.x, runner.y - chaser.y).toFixed(1) + ' m';
   const b = getBest(mapIdx, diffKey); $('hBest').textContent = b ? b.toFixed(1) + 's' : '–';
+  extrasHud();
 }
 
 /* ---------- Render ---------- */
@@ -2847,6 +2910,9 @@ function drawGround(g, x, y) {
   } else if (g === 'f') {     // wooden floor
     rect('#4a3826', 0, 0, 1.01, 1.01); stroke('#33261a', .04, [0, .33, 1, .33]); stroke('#33261a', .04, [0, .67, 1, .67]);
     stroke('#33261a', .04, [.3 + v * .4, 0, .3 + v * .4, .33]); stroke('#33261a', .04, [.7 - v * .4, .33, .7 - v * .4, .67]);
+  } else if (g === 'v') {     // gravel: grey with scattered pebbles
+    rect('#43464a', 0, 0, 1.01, 1.01);
+    for (let i = 0; i < 6; i++) dot(['#5b5f63', '#34373a', '#6a6d70'][(h + i) % 3], .12 + ((h * (i + 3)) % 11) * .072, .14 + ((h + i * 7) % 10) * .075, .045 + (i % 3) * .015);
   } else if (g === 'l') {     // fallen leaves are drawn afterwards as rounded piles (drawLeaves), so nothing square goes down here
   }
 }
@@ -3419,7 +3485,7 @@ function draw() {
     ctx.fillStyle = 'rgba(8,11,12,.6)'; ctx.fillRect(0, 0, W, H);
   }
   useFloor(vf);
-  drawBase(vf === 1); drawMid(); drawSolid(vf === 1); drawMarks(true); drawHeat(vf); drawReplayHits(vf);
+  drawBase(vf === 1); drawMid(); drawSolid(vf === 1); drawMarks(true); drawHeat(vf); drawReplayHits(vf); drawTraps(vf);
 
   if ($('optPath').checked && c.path && mode === 'play') {
     ctx.strokeStyle = 'rgba(226,80,63,.5)'; ctx.lineWidth = .08; ctx.setLineDash([.25, .2]);
@@ -3439,16 +3505,17 @@ function draw() {
   if (rShown) drawPerson(r.x, r.y, r.face, r.r, PAL.run, '#e8c9a0', rMoving ? now * (r.running || r.vault ? 16 : 9) : null, false);
   if (r.hp < 2 && rShown) { ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .07; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .08, 0, 7); ctx.stroke(); }
   if (r.boost > 0 && rShown) { ctx.strokeStyle = 'rgba(79,209,181,.5)'; ctx.lineWidth = .05; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .15, 0, 7); ctx.stroke(); }
+  if (rShown) drawAbilityFx(r);
 
   // chaser: hidden behind walls unless the aid is on
-  const visible = mode !== 'play' || c.state === 'carry' || (c.sees && chaserInView(c, r));
+  const visible = mode !== 'play' || c.state === 'carry' || c.human || (c.sees && chaserInView(c, r));
   if ((visible || $('optAura').checked) && !noChaser && c.floor === vf) {
     ctx.globalAlpha = visible ? 1 : 0.4;
     const cMoving = (mode === 'play' || mode === 'replay') && (c.state === 'chase' || c.state === 'lunge' || c.state === 'cool' || c.state === 'vault' || c.state === 'carry');
     drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : (c.state === 'lunge' || c.state === 'windup') ? PAL.lunge : PAL.chase,
                '#2a1513', cMoving ? now * (c.state === 'cool' ? 6 : 16) : null, true, c.state === 'lunge');
-    if (mode === 'play' && (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick' || c.state === 'opengate' || c.state === 'windup')) {
-      const full = c.state === 'windup' ? 0.55 : c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : c.state === 'kick' ? CFG.kickTime : c.state === 'opengate' ? CFG.chaserGateTime : CFG.hitCool;
+    if (mode === 'play' && (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick' || c.state === 'opengate' || c.state === 'windup' || c.state === 'settrap' || c.state === 'check')) {
+      const full = c.state === 'settrap' ? 1.2 : c.state === 'check' ? 1.2 : c.state === 'windup' ? 0.55 : c.state === 'break' ? CFG.breakTime : c.state === 'stun' ? CFG.stunTime : c.state === 'kick' ? CFG.kickTime : c.state === 'opengate' ? CFG.chaserGateTime : CFG.hitCool;
       ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .08; ctx.beginPath();
       ctx.arc(c.x, c.y, c.r + .2, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0, Math.min(1, c.t / full))); ctx.stroke();
     }
@@ -3565,6 +3632,7 @@ function draw() {
       ctx.fillStyle = '#4fd1b5'; ctx.fillText('EXIT', Math.max(40, Math.min(vw - 40, ax - Math.cos(an) * 34)), Math.max(24, Math.min(vh - 14, ay - Math.sin(an) * 34 + 5)));
     }
   }
+  drawCaptions();
   drawMinimap(fitS);
   if (flash > 0) { ctx.fillStyle = 'rgba(226,60,45,' + (flash * .35) + ')'; ctx.fillRect(0, 0, vw, vh); }
   S = fitS; ox = fitOx; oy = fitOy;   // the editor and menu always use the whole-map fit
@@ -3588,9 +3656,11 @@ function frame(t) {
 /* ---------- UI ---------- */
 function buildDrills() {
   $('drills').innerHTML = MAPS.map((m, i) => {
-    const b = getBest(i, diffKey);
-    return '<button class="drill' + (i === mapIdx ? ' on' : '') + '" data-i="' + i + '">' +
-      '<span class="best">' + (b ? b.toFixed(1) + 's' : '') + '</span><b>' + esc(m.name) +
+    const b = getBest(i, diffKey), grp = drillGroup(m), prevGrp = i ? drillGroup(MAPS[i - 1]) : 'drills';
+    const head = grp !== prevGrp ? '<div class="dhead">' + { lesson: 'Lessons', challenge: 'Challenges', custom: 'Your drills' }[grp] + '</div>' : '';
+    const locked = lessonLocked(m), right = m.goal ? (goalDone(m) ? '<span class="medal m3" title="passed"></span>' : locked ? '🔒' : '') : (medalDot(b, m) + (b ? b.toFixed(1) + 's' : ''));
+    return head + '<button class="drill' + (i === mapIdx ? ' on' : '') + (locked ? ' locked' : '') + '" data-i="' + i + '">' +
+      '<span class="best">' + right + '</span><b>' + esc(m.name) +
       (m.custom ? '<span class="tag">custom</span>' : '') + '</b><small>' + m.desc + '</small></button>';
   }).join('');
   $('drillBtns').innerHTML = '<button data-a="new">+ New drill</button><button data-a="random">Random map</button><button data-a="daily">Daily map</button>' + (MAPS[mapIdx].custom
@@ -3613,7 +3683,7 @@ $('drillBtns').addEventListener('click', e => {
   else if (a === 'daily') dailyMap();
   else if (a === 'prog') showProgress();
   else if (a === 'share') shareCode();
-  else if (a === 'code') { const box = $('codeBox'); box.classList.toggle('hide'); $('codeGo').textContent = 'Add this drill'; if (!box.classList.contains('hide')) { $('codeIn').value = ''; $('codeIn').focus(); } }
+  else if (a === 'code') { const box = $('codeBox'); box.classList.toggle('hide'); $('codeGo').textContent = 'Add'; if (!box.classList.contains('hide')) { $('codeIn').value = ''; $('codeIn').focus(); } }
   else if (a === 'copy') newDrill(true);
   else if (a === 'edit') enterEdit();
   else if (a === 'del') {
@@ -3722,11 +3792,13 @@ $('edFloor0').addEventListener('click', e => { e.target.blur(); setEdFloor(0); }
 $('edFloor1').addEventListener('click', e => { e.target.blur(); setEdFloor(1); });
 $('edOutSave').addEventListener('click', e => { e.target.blur(); commitOutline(); });
 $('edOutClear').addEventListener('click', e => { e.target.blur(); outCells = []; outStrokes = 0; outStarts = []; edMsg('Outline cleared. Draw again.'); });
-$('edTest').addEventListener('click', e => { e.target.blur(); startRun(); });
+$('edTest').addEventListener('click', e => { e.target.blur(); testStart = null; startRun(); });
+$('edTestHere').addEventListener('click', e => { e.target.blur(); testHereClick(); });
 $('edDone').addEventListener('click', () => { buildDrills(); showMenu(); });
 // pointer events cover mouse, pen and touch, so the editor works on a touchscreen too
 cv.addEventListener('pointerdown', e => {
   if (mode !== 'edit') return;
+  if (testArm) { e.preventDefault(); testHerePick(e); return; }
   e.preventDefault(); edStroke = ++edStrokeN; symLast = {};
   const p = cellFromEvent(e);
   if (tool === 'outline') { if (p && e.button !== 2) { painting = 3; outStarts.push(outCells.length); outCells.push(p); outStrokes++; } return; }   // each press starts a new stroke
@@ -3908,6 +3980,8 @@ addEventListener('keydown', e => {
   if (GAME_KEYS.includes(e.code) || allKbCodes().includes(e.code)) e.preventDefault();
   if (mode === 'edit') {
     if ((e.ctrlKey || e.metaKey) && edKey(e)) { e.preventDefault(); return; }
+    if (testArm === 2 && e.code === 'Enter') { testArm = 0; startTestRun(); return; }
+    if (testArm && e.code === 'Escape') { testArm = 0; edMsg('Test from here cancelled.'); return; }
     const b = document.querySelectorAll('#tools button')[parseInt(e.key, 10) - 1];
     if (b) b.click();
     if (e.code === 'KeyR') doRotate();
@@ -3920,6 +3994,8 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (kbIs('restart', e.code)) { startRun(); return; }
   if (e.code === 'KeyP' && mode === 'over' && lastRec) { startReplay(); return; }
+  if (mode === 'play' && twoSplit() && e.code === 'Enter') { p2Attack = true; return; }
+  if (mode === 'play' && kbIs('ability', e.code)) abilityPressed = true;
   if (kbIs('act', e.code)) { if (mode !== 'play') { startRun(); return; } spacePressed = true; }
   keys.add(e.code);
 });
@@ -3945,10 +4021,10 @@ function setPalette() {
 
 // Keys. Each action has a main key you can change, plus fixed extras (the arrow keys still move you).
 const KB_DEF = { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-                 run: ['ShiftLeft', 'ShiftRight'], act: ['Space'], restart: ['KeyR'] };
-const KB_NAME = { up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', run: 'Run / walk', act: 'Vault (hold) / drop / action', restart: 'Restart' };
+                 run: ['ShiftLeft', 'ShiftRight'], act: ['Space'], ability: ['KeyE'], restart: ['KeyR'] };
+const KB_NAME = { up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', run: 'Run / walk', act: 'Vault (hold) / drop / action', ability: 'Use ability', restart: 'Restart' };
 let KB = JSON.parse(JSON.stringify(KB_DEF)), kbCapture = null, padCapture = null;
-const PADK = { act: 0, restart: 3 };
+const PADK = { act: 0, ability: 1, restart: 3 };
 const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'L-stick', 'R-stick', 'Up', 'Down', 'Left', 'Right'];
 try { const s = JSON.parse(store('lt_keys') || 'null'); if (s) for (const a in KB_DEF) if (Array.isArray(s[a]) && s[a].length && s[a].every(k => typeof k === 'string')) KB[a] = s[a]; } catch (e) {}
 try { const s = JSON.parse(store('lt_padkeys') || 'null'); if (s) for (const a in PADK) if (Number.isInteger(s[a]) && s[a] >= 0 && s[a] < 32) PADK[a] = s[a]; } catch (e) {}
@@ -3971,7 +4047,7 @@ function setKey(a, code) {
 function buildKeyList() {
   $('keyList').innerHTML = Object.keys(KB_NAME).map(a => '<li><span>' + KB_NAME[a] + '</span><button class="kb' + (kbCapture === a ? ' wait' : '') + '" data-k="' + a + '">' +
     (kbCapture === a ? 'press a key…' : esc(keyLabel(KB[a][0]))) + '</button></li>').join('');
-  $('padList').innerHTML = [['act', 'Controller: vault / drop / action'], ['restart', 'Controller: restart (Menu also works)']].map(([a, n]) =>
+  $('padList').innerHTML = [['act', 'Controller: vault / drop / action'], ['ability', 'Controller: use ability'], ['restart', 'Controller: restart (Menu also works)']].map(([a, n]) =>
     '<li><span>' + n + '</span><button class="kb' + (padCapture === a ? ' wait' : '') + '" data-p="' + a + '">' +
     (padCapture === a ? 'press a button…' : (PAD_NAMES[PADK[a]] || 'button ' + PADK[a])) + '</button></li>').join('');
 }
@@ -4042,6 +4118,12 @@ const boltLive = b => wxMix(b.t).w.storm > 0.3;
 // away for a moment; while the thunder rolls it can barely hear you.
 function wxAt(t) {
   const m = wxMix(t); WX = m.w;
+  const dk = wxDusk ? duskK(t) : 0;
+  if (dk > 0) {   // day turning to night: blend toward night's short sight and darkness
+    const N = WX_SET.night, b = WX, vb = b.view || WX_FAR, v = vb + (N.view - vb) * dk;
+    WX = Object.assign({}, b, { dark: Math.max(b.dark, dk), view: v >= WX_FAR - 0.5 ? 0 : Math.min(vb, v),
+      sight: Math.min(b.sight, b.sight + (N.sight - b.sight) * dk), markSee: Math.min(b.markSee, b.markSee + (N.markSee - b.markSee) * dk) });
+  }
   if (!wxBolts.length || WX.storm <= 0.3) return m.i;
   let flash = 0, bolt = null, rumble = false;
   for (const b of wxBolts) {
@@ -4061,6 +4143,7 @@ function wxAt(t) {
 function wxTick() {
   const i = wxAt(now);
   if (mode === 'play' && i > wxSaid) { wxSaid = i; say(WX_SAY[wxPlan[i].name] || ''); }
+  if (mode === 'play' && wxDusk) { const dk = duskK(now); if (dk > 0 && wxDuskSaid < 1) { wxDuskSaid = 1; say('The sun is going down'); } else if (dk >= 1 && wxDuskSaid < 2) { wxDuskSaid = 2; say('Night has fallen'); } }
   while (wxThunderI < wxBolts.length && wxBolts[wxThunderI].t + wxBolts[wxThunderI].delay <= now) {
     const b = wxBolts[wxThunderI++];
     if (mode === 'play' && now - b.t - b.delay < 0.5 && boltLive(b)) sndThunder(b.near);
@@ -4082,7 +4165,7 @@ function chaserProfile() {
   return D;
 }
 function adaptUpdate(t, escaped) {
-  if (!$('optAdapt').checked || $('optNoChaser').checked || trainer) return '';
+  if (!$('optAdapt').checked || $('optNoChaser').checked || trainer || chaser.human) return '';
   const was = adaptLevel(), lv = escaped || t >= 60 ? Math.min(10, was + 1) : t < 20 ? Math.max(0, was - 1) : was;
   store('lt_adapt_' + diffKey, String(lv));
   return lv > was ? 'Adaptive: the chaser steps up to level ' + lv + '.' : lv < was ? 'Adaptive: the chaser eases off to level ' + lv + '.' : 'Adaptive: the chaser stays at level ' + lv + '.';
@@ -4106,7 +4189,7 @@ function withSeed(seed, fn) {
 let rec = null, lastRec = null, replay = null, lastCard = '';
 function recStart() {
   const sp = allSpecials();
-  rec = { map: mapIdx, id: MAPS[mapIdx].id, frames: [], marks: [], blood: [], ev: [], objs: sp.slice(), last: sp.map(s => s.state), next: 0, endStart: -1, wx: WX.name, wxPlan: wxPlan.slice(), wxBolts };
+  rec = { map: mapIdx, id: MAPS[mapIdx].id, frames: [], marks: [], blood: [], ev: [], objs: sp.slice(), last: sp.map(s => s.state), next: 0, endStart: -1, wx: WX.name, wxPlan: wxPlan.slice(), wxBolts, wxDusk };
 }
 function recTick(force) {
   if (!rec || (!force && now < rec.next)) return;
@@ -4125,7 +4208,7 @@ function recEnd() {
 function startReplay() {
   const R = lastRec;
   if (!R || R.map >= MAPS.length || MAPS[R.map].id !== R.id) { say('No replay for this drill'); return; }
-  mapIdx = R.map; leaveWorkspace(); settleFloors(); mode = 'replay'; wxPlan = R.wxPlan || [{ t: 0, name: WX_SET[R.wx] ? R.wx : 'clear' }]; wxBolts = R.wxBolts || []; wxAt(0);
+  mapIdx = R.map; leaveWorkspace(); settleFloors(); mode = 'replay'; wxPlan = R.wxPlan || [{ t: 0, name: WX_SET[R.wx] ? R.wx : 'clear' }]; wxBolts = R.wxBolts || []; wxDusk = !!R.wxDusk; wxAt(0);
   loadMap(); setBars(false);
   replay = { t: 0, speed: 1, playing: true, len: R.frames[R.frames.length - 1][0], fi: 0, ei: 0, objs: allSpecials().slice(), applied: 0 };
   $('overlay').classList.add('hide'); $('replayBar').classList.remove('hide');
@@ -4145,6 +4228,9 @@ function replayEvents(show) {
     else if (e.k === 'gate') { withSeed(e.seed, spawnExitGate); for (const s of allSpecials()) if (!replay.objs.includes(s)) replay.objs.push(s); }
     else if (show && e.k === 'hit') { floatText(e.x, e.y - .7, 'HIT', '#e2503f'); flash = 1; }
     else if (show && e.k === 'fx') floatText(e.x, e.y, e.txt, e.col);
+    else if (e.k === 'trap') traps.push({ x: e.x, y: e.y, f: e.f, armed: true });
+    else if (e.k === 'trapSpring' && traps[e.i]) traps[e.i].armed = false;
+    else if (e.k === 'trapGone' && traps[e.i]) traps[e.i].gone = true;
   }
   replay.applied = replay.t;
 }
@@ -4280,6 +4366,7 @@ function extrasTick(dt) {
     if (A && A === stats.anchor) stats.anchorT += dt;
     else { closeLoop(); stats.anchor = A; }
   } else closeLoop();
+  goalTick();
 }
 function breakdownHTML() {
   const out = [], dl = stats.dropLog, vl = stats.vaultLog, lp = stats.loops;
@@ -4306,14 +4393,16 @@ function breakdownHTML() {
 }
 function cardButtons() {
   return '<div class="btns" data-stay><button class="primary" data-act="again">Run it again</button>' +
-    (lastRec ? '<button data-act="replay">Watch replay (P)</button>' : '') + '</div>' +
+    (lastRec ? '<button data-act="replay">Watch replay (P)</button>' : '') +
+    (MAPS[mapIdx].custom && !isDaily(MAPS[mapIdx]) ? '<button data-act="editor">Back to editor</button>' : '') + '</div>' +
     '<div class="go">Press <kbd>' + keyLabel(KB.act[0]) + '</kbd> or <kbd>' + keyLabel(KB.restart[0]) + '</kbd>, <kbd>' + (PAD_NAMES[PADK.act] || 'A') + '</kbd> on a controller, or tap here to run it again</div>';
 }
 function menuExtras() {
   const m = MAPS[mapIdx], bits = [];
   if (m.trainer === 'pallet') bits.push('Timing drill, 10 rounds. Run through the gap, wait beside the pallet and drop it at the last moment: as the chaser reaches it, not before. Each round is graded.');
   if (m.trainer === 'window') bits.push('Timing drill, 10 rounds. The chaser starts a different distance behind you each round. Run straight at the window and vault: each vault is graded safe, tight or too close, so you learn how much gap a vault needs.');
-  if (/^daily-/.test(m.id || '')) bits.push('Today\'s daily map: the same for everyone today. Your best time here is kept for the day.');
+  if (/^daily-/.test(m.id || '')) bits.push('Today\'s daily map: the same for everyone today. Your best time here is kept for the day.' + friendsLine());
+  bits.push(...menuExtras2());
   const type = $('optType').value;
   if (type !== 'standard' || $('optAdapt').checked || $('optWeather').value !== 'clear')
     bits.push('This run: ' + [$('optType').selectedOptions[0].textContent, $('optAdapt').checked ? 'adaptive level ' + adaptLevel() : '', $('optWeather').value !== 'clear' ? $('optWeather').selectedOptions[0].textContent.split(':')[0].toLowerCase() : ''].filter(Boolean).join(' · ') + '.');
@@ -4324,7 +4413,7 @@ function menuExtras() {
 const histKey = (m, d) => 'lt_hist_' + MAPS[m].id + '_' + d;
 function getHist(m, d) { try { const a = JSON.parse(store(histKey(m, d)) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 function pushHistory(t, escaped) {
-  if (trainer || $('optNoChaser').checked) return getHist(mapIdx, diffKey);
+  if (trainer || $('optNoChaser').checked || chaser.human) return getHist(mapIdx, diffKey);
   const a = getHist(mapIdx, diffKey).concat([[Date.now(), +t.toFixed(1), escaped ? 1 : 0]]).slice(-60);
   store(histKey(mapIdx, diffKey), JSON.stringify(a)); return a;
 }
@@ -4352,11 +4441,11 @@ function showProgress() {
     for (const d of ['easy', 'normal', 'hard']) {
       const h = getHist(i, d); if (!h.length) continue;
       const v = h.map(x => x[1]);
-      rows.push('<div class="row"><div><b>' + esc(m.name) + '</b><small>' + d + ' · ' + h.length + ' run' + (h.length === 1 ? '' : 's') + ' · best ' + Math.max(...v).toFixed(1) +
+      rows.push('<div class="row"><div><b>' + medalDot(Math.max(...v), m) + esc(m.name) + '</b><small>' + d + ' · ' + h.length + ' run' + (h.length === 1 ? '' : 's') + ' · best ' + Math.max(...v).toFixed(1) +
         ' s · last ' + v[v.length - 1].toFixed(1) + ' s</small></div><div style="width:44%">' + (sparkline(v.slice(-30), 200, 34) || '<small>one run so far</small>') + '</div></div>');
     }
   });
-  $('card').innerHTML = '<h3>Progress</h3><div class="prog" data-stay>' + (rows.join('') || '<div class="coach">No runs recorded yet. Finish a run and it will show up here.</div>') +
+  $('card').innerHTML = '<h3>Progress</h3>' + medalShelf() + '<div class="prog" data-stay>' + (rows.join('') || '<div class="coach">No runs recorded yet. Finish a run and it will show up here.</div>') +
     '</div><div class="btns" data-stay><button class="primary" data-act="menu">Close</button></div>';
 }
 
@@ -4531,7 +4620,7 @@ function injuredTick(dt, moving) {
   }
   if (now >= r.groanNext) {
     r.groanNext = now + 2.5 + Math.random() * 3;
-    sndGroan();
+    sndGroan(); caption('you groan in pain', r.x, r.y);
     if (!$('optNoChaser').checked && c.floor === r.floor && !c.inChase && c.state !== 'carry' && Math.hypot(c.x - r.x, c.y - r.y) < 10 * WX.hear) {
       c.kx = r.x; c.ky = r.y; c.kf = r.floor; c.kvia = -1; c.lastLeadT = now; c.onLead = true; c.repath = 0;
       floatText(r.x, r.y - 1.1, 'heard!', '#e2503f');
@@ -4672,6 +4761,7 @@ async function shareCode() {
   catch (e) { dataMsg('Here is the code for "' + m.name + '". Select it in the box and copy it.'); $('codeIn').select(); }
 }
 async function loadCode(text) {
+  if (/^LTS1\./.test((text || '').trim())) { loadScoreCode(text); return; }
   const mm = /^LT([01])\.([A-Za-z0-9_-]+)$/.exec((text || '').replace(/\s+/g, ''));
   if (!mm) { dataMsg('That doesn\'t look like a drill code (they start with LT1.).'); return; }
   let d = null;
@@ -4771,16 +4861,17 @@ function symStamp(e, p) {
 }
 
 /* ----- Options and their controls ----- */
-const OPT_DEF = { optCoach: 1, optHeat: 0, optHook: 1, optBlood: 1, optMini: 1, optCB: 0, optVib: 1, optAdapt: 0 };
+const OPT_DEF = { optCoach: 1, optHeat: 0, optHook: 1, optBlood: 1, optMini: 1, optCB: 0, optVib: 1, optAdapt: 0, optTwo: 0, optDusk: 0, optCaps: 0, optTouchSwap: 0 };
 for (const id in OPT_DEF) {
   const v = store('lt_' + id); $(id).checked = v === null || v === undefined ? !!OPT_DEF[id] : v === '1';
   $(id).addEventListener('change', e => {
     store('lt_' + id, e.target.checked ? '1' : '0'); e.target.blur();
     if (id === 'optCB') setPalette();
-    if (id === 'optAdapt' || id === 'optCB') { buildDrills(); if (mode === 'menu') showMenu(); }
+    if (id === 'optTouchSwap') applyTouchLayout();
+    if (id === 'optAdapt' || id === 'optCB' || id === 'optTwo' || id === 'optDusk') { buildDrills(); if (mode === 'menu') showMenu(); }
   });
 }
-for (const id of ['optType', 'optWeather']) {
+for (const id of ['optType', 'optWeather', 'optAbility']) {
   const v = store('lt_' + id); if (v && [...$(id).options].some(o => o.value === v)) $(id).value = v;
   $(id).addEventListener('change', e => { store('lt_' + id, e.target.value); e.target.blur(); if (mode === 'menu') showMenu(); });
 }
@@ -4788,7 +4879,7 @@ setPalette(); buildKeyList();
 $('keyList').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; b.blur(); kbCapture = kbCapture === b.dataset.k ? null : b.dataset.k; padCapture = null; buildKeyList(); });
 $('padList').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (!b) return; b.blur(); padCapture = padCapture === b.dataset.p ? null : b.dataset.p; kbCapture = null; buildKeyList(); });
 $('kbReset').addEventListener('click', e => {
-  e.target.blur(); KB = JSON.parse(JSON.stringify(KB_DEF)); PADK.act = 0; PADK.restart = 3; kbCapture = padCapture = null;
+  e.target.blur(); KB = JSON.parse(JSON.stringify(KB_DEF)); PADK.act = 0; PADK.ability = 1; PADK.restart = 3; kbCapture = padCapture = null;
   store('lt_keys', JSON.stringify(KB)); store('lt_padkeys', JSON.stringify(PADK)); buildKeyList(); if (mode === 'menu') showMenu();
 });
 $('heatClear').addEventListener('click', e => { e.preventDefault(); e.target.blur(); store(hitKey(), '[]'); heatCache = null; say('Hit map cleared for this drill'); });
@@ -4799,7 +4890,9 @@ $('replayBar').addEventListener('click', e => { const b = e.target.closest('[dat
 $('card').addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   e.stopPropagation(); b.blur();
-  if (b.dataset.act === 'again') startRun(); else if (b.dataset.act === 'replay') startReplay(); else if (b.dataset.act === 'menu') showMenu();
+  const act = b.dataset.act;
+  if (act === 'again') startRun(); else if (act === 'replay') startReplay(); else if (act === 'menu') showMenu();
+  else if (act === 'next') nextLesson(); else if (act === 'editor') enterEdit(); else if (act === 'score') copyScoreCode();
 });
 $('codeGo').addEventListener('click', e => { e.target.blur(); loadCode($('codeIn').value); });
 $('edUndo').addEventListener('click', e => { e.target.blur(); edUndo(); });
@@ -4810,6 +4903,481 @@ $('edSym').addEventListener('change', e => {
   e.target.blur();
   edMsg(e.target.value ? 'Symmetry on: whatever you paint or stamp is copied to the mirrored side' + (e.target.value === 'xy' ? 's' : '') + ' of the map. Start points and cars are not mirrored.' : 'Symmetry off.');
 });
+
+/* ---------- v1.3: runner abilities, trapper chaser, two players, lessons and challenges, medals, editor test-from-here,
+   daily score codes, sound captions, touch layout, day-to-night ---------- */
+let abilityPressed = false, p2Attack = false, traps = [], caps = [], wxDusk = false, wxDuskSaid = 0, testStart = null, testArm = 0, goalEscaped = false;
+const duskK = t => Math.max(0, Math.min(1, (t - 20) / 180));   // 0 in daylight, 1 once night has fallen (after about 3 minutes)
+const twoOn = () => mode === 'play' && !!chaser && !!chaser.human;
+const twoPad = () => twoOn() && pad.on;      // a controller is plugged in: it drives the chaser, the runner has the keyboard
+const twoSplit = () => twoOn() && !pad.on;   // one keyboard: the arrows and Enter belong to the chaser
+const actLabel = () => lastSrc === 'pad' ? (PAD_NAMES[PADK.act] || 'A') : lastSrc === 'touch' ? 'ACTION' : keyLabel(KB.act[0]).toUpperCase();
+
+/* ----- Runner abilities: one per run, each with a recharge ----- */
+const ABIL = {
+  burst: { name: 'Sprint burst', dur: 3, cd: 40 },
+  sidestep: { name: 'Sidestep', dur: 0.18, cd: 12 },
+  silent: { name: 'Silent', dur: 6, cd: 35 },
+};
+const silentNow = () => !!runner && runner.ability === 'silent' && runner.abT > 0;
+function abilityTick(r, dt) {
+  if (r.abCD > 0) r.abCD = Math.max(0, r.abCD - dt);
+  if (r.abT > 0) {
+    r.abT -= dt;
+    if (r.abT <= 0) { r.abT = 0; if (r.ability !== 'sidestep') floatText(r.x, r.y - .8, ABIL[r.ability].name.toLowerCase() + ' over', '#8a9a98'); }
+  }
+  if (!abilityPressed) return;
+  abilityPressed = false;
+  const A = ABIL[r.ability];
+  if (!A || r.hidden || r.vault || r.trapT > 0 || r.taken || mode !== 'play') return;
+  if (r.abCD > 0) { say(A.name + ' ready in ' + Math.ceil(r.abCD) + ' s'); return; }
+  r.abT = A.dur; r.abCD = A.cd + A.dur; buzz(40, .2);
+  if (r.ability === 'sidestep') {
+    let [dx, dy] = inputDir(); if (!dx && !dy) { dx = Math.cos(r.face); dy = Math.sin(r.face); }
+    r.dash = { dx, dy, t: 0.18 };
+  }
+  floatText(r.x, r.y - .8, A.name.toLowerCase(), '#b9b0ff');
+  if (rec) rec.ev.push({ t: now, k: 'fx', x: r.x, y: r.y - .8, txt: A.name.toLowerCase(), col: '#b9b0ff' });
+}
+function drawAbilityFx(r) {
+  if (!r.ability || !(r.abT > 0) || mode === 'edit' || mode === 'menu' || mode === 'replay') return;
+  ctx.save();
+  if (r.ability === 'silent') ctx.setLineDash([.12, .1]);
+  ctx.strokeStyle = 'rgba(185,176,255,.8)'; ctx.lineWidth = .06; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .22, 0, 7); ctx.stroke();
+  ctx.restore();
+}
+
+/* ----- The trapper: sets traps while it hunts. You only spot them up close. ----- */
+function trapperWants(c) {
+  if (now < (c.trapNext || 6)) return false;
+  c.trapNext = now + 8 + Math.random() * 7;
+  const live = traps.filter(t => !t.gone);
+  if (live.length >= 6) return false;
+  const i = Math.floor(c.y) * W + Math.floor(c.x);
+  if (spec[i] || STAIR[i] || HILL[i] || PROP[i] || AIR[i] || EXITL[i]) return false;
+  return !live.some(t => t.f === c.floor && Math.hypot(t.x - c.x, t.y - c.y) < 5);
+}
+function placeTrap(c) {
+  const t = { x: Math.floor(c.x) + .5, y: Math.floor(c.y) + .5, f: c.floor, armed: true };
+  traps.push(t); if (rec) rec.ev.push({ t: now, k: 'trap', x: t.x, y: t.y, f: t.f });
+  pickSearch(c, false);
+}
+function trapCheck(r) {
+  if (r.trapT > 0) return;
+  for (let i = 0; i < traps.length; i++) {
+    const t = traps[i];
+    if (!t.armed || t.gone || t.f !== r.floor || Math.hypot(t.x - r.x, t.y - r.y) > 0.42) continue;
+    t.armed = false; r.trapT = 3; r.trap = i; r.x = t.x; r.y = t.y; r.vx = r.vy = 0; r.running = false;
+    if (rec) rec.ev.push({ t: now, k: 'trapSpring', i });
+    say('Caught in a trap! Mash ' + actLabel() + ' to break free'); flash = 0.6; buzz(180, .7);
+    if (snd.ctx && snd.on) sndClang(snd.ctx.currentTime + 0.01, 0.9);
+    caption('trap snaps shut', t.x, t.y);
+    stats.trapped = (stats.trapped || 0) + 1;
+    const c = chaser;   // the snap is loud: the chaser comes running
+    if (!$('optNoChaser').checked && !c.human && c.floor === r.floor && Math.hypot(c.x - r.x, c.y - r.y) < 30) {
+      c.kx = r.x; c.ky = r.y; c.kf = r.floor; c.kvia = -1; c.lastLeadT = now; c.onLead = true; c.repath = 0;
+    }
+    return;
+  }
+}
+function trappedTick(r, dt) {
+  r.vx = r.vy = 0; r.running = false; r.headT = 0;
+  r.trapT -= dt; if (spacePressed) r.trapT -= 0.15;
+  if (r.trapT <= 0) {
+    r.trapT = 0; const t = traps[r.trap];
+    if (t) { t.gone = true; if (rec) rec.ev.push({ t: now, k: 'trapGone', i: r.trap }); }
+    say('Free of the trap');
+  }
+}
+function drawTraps(vf) {
+  if (mode === 'menu' || mode === 'edit' || !traps.length) return;
+  const r = runner;
+  for (const t of traps) {
+    if (t.gone || t.f !== vf) continue;
+    let a = 1;
+    if (t.armed && mode === 'play') {   // an armed trap fades into view as you get close (or in a lightning flash)
+      const d = Math.hypot(t.x - r.x, t.y - r.y); a = Math.max(0, Math.min(1, (4 - d) / 2));
+      if ((WX.flash || 0) > 0.4) a = Math.max(a, 0.8);
+    }
+    if (a <= 0.02) continue;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(t.x, t.y);
+    ctx.strokeStyle = '#8f9599'; ctx.lineWidth = .06; ctx.beginPath(); ctx.arc(0, 0, .32, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#9aa1a5';
+    for (let k = 0; k < 8; k++) {
+      ctx.save(); ctx.rotate(k * Math.PI / 4); ctx.beginPath();
+      if (t.armed) { ctx.moveTo(.31, -.055); ctx.lineTo(.16, 0); ctx.lineTo(.31, .055); }
+      else { ctx.moveTo(.1, -.05); ctx.lineTo(.0, 0); ctx.lineTo(.1, .05); }
+      ctx.fill(); ctx.restore();
+    }
+    ctx.fillStyle = t.armed ? '#b3261a' : '#5a2a26'; ctx.beginPath(); ctx.arc(0, 0, .07, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* ----- Two players: the second player drives the chaser ----- */
+function p2Dir() {
+  if (pad.on) return [pad.x, pad.y];
+  let x = 0, y = 0;
+  if (keys.has('ArrowLeft')) x--; if (keys.has('ArrowRight')) x++; if (keys.has('ArrowUp')) y--; if (keys.has('ArrowDown')) y++;
+  const l = Math.hypot(x, y); return l ? [x / l, y / l] : [0, 0];
+}
+// What the attack button does instead of a lunge: vault a window, break a dropped pallet or search a locker it is facing.
+function p2Target(c) {
+  const fx = Math.cos(c.face), fy = Math.sin(c.face);
+  let best = null, bd = 9;
+  for (const s of specials) {
+    const cx = s.x + .5, cy = s.y + .5, d = Math.hypot(c.x - cx, c.y - cy);
+    if (d > 1.6 || d >= bd) continue;
+    const facing = ((cx - c.x) * fx + (cy - c.y) * fy) / (d || 1) > 0.3;
+    if (!facing) continue;
+    if (s.type === 'locker') { bd = d; best = s; }
+    else if (s.type === 'pallet' && s.state === 'down' && d < 1.4) { bd = d; best = s; }
+    else if (s.type === 'window') {
+      const al = s.axis === 'x' ? c.x - cx : c.y - cy, lat = s.axis === 'x' ? c.y - cy : c.x - cx;
+      if (Math.abs(al) <= 1.2 && Math.abs(lat) <= 0.55) { bd = d; best = s; }
+    }
+  }
+  return best;
+}
+function humanChaser(dt, D) {
+  const c = chaser, r = runner, dist = Math.hypot(r.x - c.x, r.y - c.y), same = r.floor === c.floor;
+  c.sees = same && los(c.x, c.y, r.x, r.y) && !(r.bushHide && dist > 0.8);
+  c.saw = c.sees && dist < WX.sight && !r.hidden;
+  if (same) stats.closest = Math.min(stats.closest, dist);
+  if (c.saw) { c.lastLeadT = now; c.lastSawT = now; }
+  if (c.inChase && !c.sees) { if (!c.losFrom) c.losFrom = now; else if (!c.losCounted && now - c.losFrom > 1) { c.losCounted = true; stats.losBreaks++; } }
+  else if (c.sees) { c.losFrom = 0; c.losCounted = false; }
+  const was = c.inChase; c.inChase = now - c.lastLeadT < 4;   // the chase lasts while the chaser has seen the runner in the last 4 s
+  if (c.inChase && !was) { say('Chase!'); stats.chases++; }
+  if (!c.inChase && was) { say('The runner got away'); stats.lost++; c.chaseT = 0; }
+  if (c.inChase) stats.chase += dt;
+  c.tracked = c.inChase;
+  if (c.slowT > 0) c.slowT -= dt;
+  const atk = p2Attack;
+  if (c.state === 'stun') { c.t -= dt; if (c.t <= 0) c.state = 'chase'; return; }
+  if (c.state === 'break') { c.t -= dt; if (c.t <= 0) { c.target.state = 'broken'; c.state = 'chase'; c.chaseT = 0; stats.breaks++; } return; }
+  if (c.state === 'vault') {
+    const v = c.vault; v.p += dt / CFG.chaserVault; const p = Math.min(1, v.p);
+    c.x = v.fx + (v.tx - v.fx) * p; c.y = v.fy + (v.ty - v.fy) * p;
+    if (v.p >= 1) { c.state = 'chase'; c.vault = null; }
+    return;
+  }
+  if (c.state === 'check') {
+    c.t -= dt;
+    if (c.t <= 0) {
+      const Lk = c.lockerTarget; c.lockerTarget = null; c.state = 'chase';
+      if (Lk) { Lk.checkedT = now; if (r.hidden === Lk) { leaveLocker(); stats.grabs++; hitRunner(); say('Pulled out of the locker!'); } else floatText(Lk.x + .5, Lk.y - .2, 'empty', '#8a9a98'); }
+    }
+    return;
+  }
+  if (c.state === 'lunge') {
+    c.x += Math.cos(c.face) * CFG.lungeSpeed * dt; c.y += Math.sin(c.face) * CFG.lungeSpeed * dt; resolve(c);
+    const d2 = Math.hypot(r.x - c.x, r.y - c.y);
+    if (d2 < CFG.hitRange && !(r.vault && r.vault.p > 0.55) && same && !r.hidden && los(c.x, c.y, r.x, r.y)) { hitRunner(); return; }
+    c.t -= dt; if (c.t <= 0) { c.state = 'cool'; c.t = CFG.missCool; stats.dodges++; floatText(r.x, r.y - .7, 'dodged', PAL.run); }
+    return;
+  }
+  let mul = 1;
+  if (c.state === 'cool') { c.t -= dt; mul = 0.25; if (c.t <= 0) c.state = 'chase'; }
+  else {
+    if (c.tracked) c.chaseT += dt;
+    c.tier = c.chaseT > D.tiers[2] ? 3 : c.chaseT > D.tiers[1] ? 2 : c.chaseT > D.tiers[0] ? 1 : 0;
+    stats.maxTier = Math.max(stats.maxTier, c.tier);
+  }
+  const [ix, iy] = p2Dir();
+  if (ix || iy) c.face = Math.atan2(iy, ix);
+  if (atk && c.state === 'chase') {
+    const s = p2Target(c), sx = s ? s.x + .5 : 0, sy = s ? s.y + .5 : 0;
+    if (s) c.face = Math.atan2(sy - c.y, sx - c.x);
+    if (s && s.type === 'window') {
+      const al = s.axis === 'x' ? c.x - sx : c.y - sy, side = -(Math.sign(al) || 1) * 0.95;
+      c.state = 'vault'; c.vault = { fx: c.x, fy: c.y, tx: s.axis === 'x' ? sx + side : sx, ty: s.axis === 'x' ? sy : sy + side, p: 0 }; return;
+    }
+    if (s && s.type === 'pallet') { c.state = 'break'; c.t = CFG.breakTime; c.target = s; return; }
+    if (s && s.type === 'locker') { c.state = 'check'; c.t = 1.2; c.lockerTarget = s; return; }
+    c.state = 'lunge'; c.t = CFG.lungeTime; return;
+  }
+  if (ix || iy) {
+    const sp = (D.speed + c.tier * 0.2) * mul * (GROUND_SPEED[groundAt(c.x, c.y)] || 1) * (c.slowT > 0 ? 0.4 : 1);
+    c.x += ix * sp * dt; c.y += iy * sp * dt; resolve(c); floorCheck(c, 0.8); landCheck(c, 0.7);
+  }
+}
+
+/* ----- Sound captions: what you would hear, and where it came from ----- */
+function caption(text, x, y) {
+  if (!$('optCaps').checked || mode !== 'play') return;
+  caps.push({ text, x, y, t: now }); if (caps.length > 8) caps.shift();
+}
+function drawCaptions() {
+  const r = runner, font = px => '600 ' + px + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  if (mode === 'play' && r.trapT > 0) { ctx.font = font(Math.max(11, S * .5)); ctx.fillStyle = '#f0b648'; ctx.fillText('MASH ' + actLabel() + ' to break free', ox + r.x * S, oy + (r.y - 1.4) * S); }
+  if (!$('optCaps').checked || mode !== 'play') return;
+  caps = caps.filter(c => now - c.t < 2.4);
+  let row = 0;
+  for (const c of caps) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, 2.4 - (now - c.t)));
+    ctx.font = font(13);
+    const txt = '♪ ' + c.text, w = ctx.measureText(txt).width + 16;
+    let sx, sy, an = null;
+    if (c.x === undefined) { sx = vw / 2; sy = 64 + row++ * 22; }      // no place: along the top
+    else {
+      sx = ox + c.x * S; sy = oy + c.y * S - 12;
+      const pad = 40, cx = Math.max(pad + w / 2 - 30, Math.min(vw - pad - w / 2 + 30, sx)), cy = Math.max(pad, Math.min(vh - pad, sy));
+      if (cx !== sx || cy !== sy) an = Math.atan2(sy - cy, sx - cx);
+      sx = cx; sy = cy;
+    }
+    ctx.fillStyle = 'rgba(10,13,14,.78)'; ctx.fillRect(sx - w / 2, sy - 14, w, 20);
+    ctx.fillStyle = '#cfe0ea'; ctx.fillText(txt, sx, sy);
+    if (an !== null) {                                                // off screen: an arrow points toward it
+      ctx.save(); ctx.translate(sx + Math.cos(an) * (w / 2 + 10), sy - 4 + Math.sin(an) * 14); ctx.rotate(an);
+      ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+  // footsteps: the chaser is out of sight but close enough to hear, so an arc around you shows which way it is
+  const c = chaser;
+  if (!$('optNoChaser').checked && !c.human && c.floor === r.floor && !r.hidden && !(c.sees && chaserInView(c, r))) {
+    const d = Math.hypot(c.x - r.x, c.y - r.y), range = 16 * WX.hear;
+    if (d < range && d > 0.5 && ['chase', 'lunge', 'cool', 'carry', 'vault'].includes(c.state)) {
+      const an = Math.atan2(c.y - r.y, c.x - r.x), rx = ox + r.x * S, ry = oy + r.y * S, rad = Math.max(28, S * 1.7);
+      const k = 1 - d / range, pulse = 0.65 + 0.35 * Math.sin(now * (5 + 9 * k));
+      ctx.strokeStyle = 'rgba(226,80,63,' + ((0.25 + 0.65 * k) * pulse).toFixed(3) + ')'; ctx.lineWidth = 3 + 4 * k; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(rx, ry, rad, an - 0.38, an + 0.38); ctx.stroke(); ctx.lineCap = 'butt';
+      ctx.font = font(11); ctx.fillStyle = 'rgba(240,150,130,' + (0.45 + 0.5 * k).toFixed(3) + ')';
+      ctx.fillText('footsteps', rx + Math.cos(an) * (rad + 16), ry + Math.sin(an) * (rad + 16) + 4);
+    }
+  }
+}
+
+/* ----- Medals for chase time on each drill ----- */
+const MEDAL_T = [30, 60, 120], MEDAL_N = ['', 'Bronze', 'Silver', 'Gold'];
+const medalsOf = m => (m && Array.isArray(m.medals) ? m.medals : MEDAL_T);
+const medalFor = (t, m) => (!m || m.trainer || m.goal) ? 0 : medalsOf(m).filter(x => t >= x).length;
+const medalDot = (t, m) => { const k = t ? medalFor(t, m) : 0; return k ? '<span class="medal m' + k + '" title="' + MEDAL_N[k] + '"></span>' : ''; };
+function medalLine(t) {
+  const m = MAPS[mapIdx]; if (m.trainer || m.goal || chaser.human || $('optNoChaser').checked) return '';
+  const k = medalFor(t, m), T = medalsOf(m);
+  return '<div class="rank">' + (k ? '<span class="medal big m' + k + '"></span>' + MEDAL_N[k] + ' medal' : 'No medal this run') +
+    (k < 3 ? ' · ' + MEDAL_N[k + 1].toLowerCase() + ' at ' + T[k] + ' s' : ' · the top medal') + '</div>';
+}
+function medalShelf() {
+  const n = [0, 0, 0, 0]; MAPS.forEach((m, i) => { if (!m.trainer && !m.goal) n[medalFor(getBest(i, diffKey), m)]++; });
+  const L = MAPS.filter(m => m.kind === 'lesson'), C = MAPS.filter(m => m.kind === 'challenge');
+  return '<div class="shelf" data-stay><span><span class="medal big m3"></span>' + n[3] + ' gold</span><span><span class="medal big m2"></span>' + n[2] +
+    ' silver</span><span><span class="medal big m1"></span>' + n[1] + ' bronze</span></div>' +
+    '<div class="coach">Medals on ' + diffKey + ' for your best chase time on each drill: bronze ' + MEDAL_T[0] + ' s, silver ' + MEDAL_T[1] + ' s, gold ' + MEDAL_T[2] + ' s. ' +
+    'Lessons passed: ' + L.filter(goalDone).length + ' of ' + L.length + ' · challenges done: ' + C.filter(goalDone).length + ' of ' + C.length + '.</div>';
+}
+
+/* ----- Lessons and challenges: drills with a goal ----- */
+const drillGroup = m => m.custom ? 'custom' : m.kind || 'drills';
+const goalDone = m => !!m && store('lt_goal_' + m.id) === '1';
+const lessonLocked = m => !!m && m.kind === 'lesson' && m.lesson > 1 && !goalDone(MAPS.find(x => x.kind === 'lesson' && x.lesson === m.lesson - 1));
+const goalOn = () => !!MAPS[mapIdx].goal && !$('optNoChaser').checked && !(chaser && chaser.human);
+function goalItems(m) {
+  const g = m.goal, s = stats, out = [];
+  const need = (label, cur, target, unit) => out.push({ label, prog: Math.min(cur, target).toFixed(0) + '/' + target + (unit || ''), ok: cur >= target, need: true });
+  if (g.chase) need('Spend ' + g.chase + ' s in chase', s.chase, g.chase, ' s');
+  if (g.fast) need('Make ' + g.fast + ' fast vaults', s.fast, g.fast);
+  if (g.stuns) need('Stun the chaser with a pallet', s.stuns, g.stuns);
+  if (g.lost) need('Lose the chaser', s.lost, g.lost);
+  if (g.los) need('Break its line of sight ' + g.los + ' times', s.losBreaks, g.los);
+  if (g.escape) out.push({ label: 'Do the task boxes and escape through the gate', prog: '', ok: goalEscaped, need: true });
+  if (g.noDrop) out.push({ label: 'Drop no pallets', prog: s.drops ? 'dropped one' : 'none dropped', ok: !s.drops, rule: true });
+  if (g.noHit) out.push({ label: 'Do not get hit', prog: runner.hp < 2 ? 'hit' : 'untouched', ok: runner.hp >= 2, rule: true });
+  if (g.standing) {
+    const n = allSpecials().filter(x => x.type === 'pallet' && x.state === 'up').length;
+    out.push({ label: 'Keep at least ' + g.standing + ' pallets standing', prog: n + ' standing', ok: n >= g.standing, rule: true });
+  }
+  return out;
+}
+function goalTick() {
+  if (!goalOn() || mode !== 'play') return;
+  const m = MAPS[mapIdx], it = goalItems(m);
+  if (it.some(x => x.rule && !x.ok)) { endRun('goalFail'); return; }
+  if (!m.goal.escape && it.filter(x => x.need).every(x => x.ok)) endRun('goalWin');
+}
+function goalCard(escapedBy) {
+  const m = MAPS[mapIdx];
+  goalEscaped = escapedBy === 'gate' || escapedBy === 'hatch';
+  const it = goalItems(m), won = escapedBy !== 'goalFail' && it.every(x => x.ok);
+  if (won) store('lt_goal_' + m.id, '1');
+  const lesson = m.kind === 'lesson', next = lesson && won ? MAPS.findIndex(x => x.kind === 'lesson' && x.lesson === m.lesson + 1) : -1;
+  const broken = it.find(x => x.rule && !x.ok);
+  const why = won ? '' : escapedBy === 'goalFail' && broken ? 'Rule broken: ' + broken.label.toLowerCase() + '.' : 'The chaser got you before you finished.';
+  $('card').innerHTML = '<h3>' + (won ? (lesson ? 'Lesson passed!' : 'Challenge complete!') : 'Not this time') + '</h3>' +
+    '<div class="big">' + stats.chase.toFixed(1) + 's</div><div class="rank">in chase</div>' +
+    '<div class="goals">' + it.map(x => '<div class="' + (x.ok ? 'ok' : 'bad') + '">' + (x.ok ? '✓ ' : '✗ ') + x.label +
+      (x.prog ? ' <small style="color:var(--dim)">(' + x.prog + ')</small>' : '') + '</div>').join('') + '</div>' +
+    (why ? '<div class="coach">' + why + '</div>' : '') + (won && lesson && next < 0 ? '<div class="coach">That was the last lesson. Try the challenges next.</div>' : '') +
+    (m.teach && !won ? '<div class="coach">' + m.teach + '</div>' : '') + breakdownHTML() +
+    '<div class="btns" data-stay>' + (next >= 0 ? '<button class="primary" data-act="next">Next lesson</button><button data-act="again">Again</button>'
+      : '<button class="primary" data-act="again">' + (won ? 'Run it again' : 'Try again') + '</button>') +
+    (lastRec ? '<button data-act="replay">Watch replay (P)</button>' : '') + '</div>';
+  $('overlay').classList.remove('hide'); lastCard = $('card').innerHTML; buildDrills();
+  return true;
+}
+function nextLesson() {
+  const m = MAPS[mapIdx], i = MAPS.findIndex(x => x.kind === 'lesson' && x.lesson === (m.lesson || 0) + 1);
+  if (i < 0) { showMenu(); return; }
+  mapIdx = i; store('lt_map', i); buildDrills(); showMenu();
+}
+function menuExtras2() {
+  const m = MAPS[mapIdx], out = [];
+  if (m.goal) {
+    if (lessonLocked(m)) out.push('<b>Locked.</b> Pass lesson ' + (m.lesson - 1) + ' first.');
+    if (m.teach) out.push(m.teach);
+    out.push('<b>' + (m.kind === 'lesson' ? 'To pass' : 'Challenge') + ':</b> ' + goalItems(m).map(x => x.label.toLowerCase()).join(', ') + '.' +
+      (goalDone(m) ? ' <span style="color:var(--teal)">Done before ✓</span>' : ''));
+  }
+  if ($('optTwo').checked && !$('optNoChaser').checked && !m.trainer)
+    out.push('<b>Two players.</b> Runner: ' + [KB.up, KB.left, KB.down, KB.right].map(k => keyLabel(k[0])).join('') + ' to move, ' + keyLabel(KB.act[0]) + ' for actions, ' +
+      keyLabel(KB.run[0]) + ' to walk or run. Chaser: arrow keys to move and Enter to attack, or to vault, break or search a window, dropped pallet or locker it is facing. ' +
+      'With a controller plugged in, the controller is the chaser (stick and ' + (PAD_NAMES[PADK.act] || 'A') + ') and the runner has the whole keyboard.');
+  if ($('optAbility').value !== 'none')
+    out.push('<b>Ability:</b> ' + $('optAbility').selectedOptions[0].textContent + '. Press ' + keyLabel(KB.ability[0]) + ', ' + (PAD_NAMES[PADK.ability] || 'B') + ' on a controller, or SKILL on a touchscreen.');
+  if ($('optType').value === 'trapper') out.push('<b>Trapper:</b> while it hunts it sets traps you only spot up close. Step in one and you are stuck for a few seconds (mash the action button) while it comes running.');
+  if ($('optDusk').checked) out.push('Daylight fades to night over about three minutes.');
+  return out;
+}
+
+/* ----- Editor: test from a spot you pick, with the chaser wherever you like ----- */
+function testHereClick() {
+  if (edFloor) { edMsg('Switch to the ground floor first: runs start there.'); return; }
+  testArm = 1; edMsg('Test from here: click where you want to start. (Esc cancels.)');
+}
+function testHerePick(e) {
+  const p = cellFromEvent(e); if (!p) return;
+  const ch = (MAPS[mapIdx].rows[p[1]] || '')[p[0]];
+  if (!ch || /[#WPTKXBEHJLSDAFNQV12Z3456O~UIMY]/.test(ch)) { edMsg('That tile is blocked. Click open floor.'); return; }
+  if (testArm === 1) { testStart = { rx: p[0], ry: p[1], cx: null, cy: null }; testArm = 2; edMsg('Now click where the chaser starts, or press Enter to keep its usual spot.'); return; }
+  testStart.cx = p[0]; testStart.cy = p[1]; testArm = 0; startTestRun();
+}
+function startTestRun() { if (testStart) startRun(); }
+function applyTestStart() {   // also resets per-run goal state
+  goalEscaped = false;
+  const T = testStart; if (!T || !MAPS[mapIdx].custom) return;
+  const k = 1 + mapPad, r = runner, c = chaser;
+  r.x = T.rx + k + .5; r.y = T.ry + k + .5;
+  if (T.cx !== null) { c.x = T.cx + k + .5; c.y = T.cy + k + .5; c.kx = c.x; c.ky = c.y; }
+}
+
+/* ----- Daily map score codes: compare times with friends, no server needed ----- */
+const todayKey = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const isDaily = m => /^daily-/.test((m && m.id) || '');
+function scoreSum(s) { let h = 7; for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0; return (h % 46656).toString(36).padStart(3, '0'); }
+function friendsOf(day) { try { const a = JSON.parse(store('lt_friends_' + day) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function friendsLine() {
+  const m = MAPS[mapIdx]; if (!isDaily(m)) return '';
+  const day = m.id.slice(6), you = getBest(mapIdx, diffKey), list = friendsOf(day).filter(f => f.k === diffKey);
+  if (!list.length) return ' Swap score codes with friends to compare: finish a run, then press Copy score code.';
+  const all = list.map(f => [f.n, f.t]).concat(you ? [['You', you]] : []).sort((a, b) => b[1] - a[1]);
+  return '<br><b>Today on ' + diffKey + ':</b> ' + all.map((x, i) => (i + 1) + '. ' + esc(x[0]) + ' ' + (+x[1]).toFixed(1) + ' s').join(' · ');
+}
+function dailyLine() {
+  const m = MAPS[mapIdx]; if (!isDaily(m) || chaser.human || $('optNoChaser').checked) return '';
+  return '<div class="coach" data-stay>' + friendsLine().replace(/^ |^<br>/, '') +
+    '<div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input id="scoreName" type="text" maxlength="16" placeholder="Your name" value="' +
+    esc(store('lt_name') || '') + '"><button class="smallbtn" data-act="score">Copy score code</button></div></div>';
+}
+async function copyScoreCode() {
+  const m = MAPS[mapIdx]; if (!isDaily(m)) return;
+  const nm = (($('scoreName') && $('scoreName').value) || '').trim().slice(0, 16) || 'Friend';
+  store('lt_name', nm);
+  const best = getBest(mapIdx, diffKey);
+  if (!best) { say('Finish a run on today\'s map first'); return; }
+  const body = b64u(new TextEncoder().encode(JSON.stringify({ d: m.id.slice(6), t: best, n: nm, k: diffKey })));
+  const code = 'LTS1.' + body + '.' + scoreSum(body);
+  $('codeBox').classList.remove('hide'); $('codeIn').value = code;
+  try { await navigator.clipboard.writeText(code); say('Score code copied'); dataMsg('Score code copied. Send it to a friend: they press Load code and paste it.'); }
+  catch (e) { say('Score code is in the Load code box'); dataMsg('Your score code is in the Load code box: select it and copy it.'); }
+}
+function loadScoreCode(text) {
+  const mm = /^LTS1\.([A-Za-z0-9_-]+)\.([0-9a-z]{3})$/.exec((text || '').replace(/\s+/g, ''));
+  let d = null;
+  if (mm && scoreSum(mm[1]) === mm[2]) { try { d = JSON.parse(new TextDecoder().decode(unb64u(mm[1]))); } catch (e) { d = null; } }
+  if (!d || !/^\d{4}-\d\d-\d\d$/.test(String(d.d)) || !(+d.t >= 0) || !DIFF[d.k]) { dataMsg('That score code is damaged or mistyped.'); return; }
+  const n = String(d.n || 'Friend').slice(0, 16), list = friendsOf(d.d).filter(f => !(f.n === n && f.k === d.k));
+  list.push({ n, t: +(+d.t).toFixed(1), k: d.k }); store('lt_friends_' + d.d, JSON.stringify(list.slice(-30)));
+  $('codeIn').value = ''; $('codeBox').classList.add('hide');
+  dataMsg('Added ' + n + '\'s ' + (+d.t).toFixed(1) + ' s on ' + d.k + ' for ' + d.d + (d.d === todayKey() ? '.' : ' (that is not today\'s map).'));
+  if (mode === 'menu') showMenu();
+}
+
+/* ----- HUD: ability recharge and goal progress ----- */
+function extrasHud() {
+  const r = runner, A = r && ABIL[r.ability], on = !!A && mode !== 'menu';
+  $('hAbBox').classList.toggle('hide', !on);
+  if (on) {
+    $('hAbName').textContent = A.name;
+    $('hAb').textContent = r.abT > 0 && r.ability !== 'sidestep' ? 'active' : r.abCD > 0 ? Math.ceil(r.abCD) + ' s' : 'ready';
+    $('tAb').classList.toggle('wait', r.abCD > 0);
+  }
+  const m = MAPS[mapIdx], g = !!m.goal && mode !== 'menu' && goalOn();
+  $('hGoalBox').classList.toggle('hide', !g);
+  if (g) $('hGoal').textContent = goalItems(m).filter(x => x.need && x.prog).map(x => x.prog).join(' · ') || 'escape';
+}
+
+/* ----- Touch layout ----- */
+function applyTouchLayout() {
+  const v = Math.max(70, Math.min(160, parseInt(store('lt_touchSize'), 10) || 100));
+  $('optTouchSize').value = v; $('touch').style.setProperty('--ts', (v / 100).toFixed(2));
+  $('touch').classList.toggle('swap', $('optTouchSwap').checked);
+}
+$('optTouchSize').addEventListener('input', e => { store('lt_touchSize', e.target.value); applyTouchLayout(); });
+$('optTouchSize').addEventListener('change', e => e.target.blur());
+$('tAb').addEventListener('pointerdown', e => { e.preventDefault(); lastSrc = 'touch'; if (mode === 'play') abilityPressed = true; });
+applyTouchLayout();
+
+/* ----- The lesson and challenge drills ----- */
+const rowsOf = id => MAPS.find(m => m.id === id).rows.slice();
+const BREAKOUT = [
+  '....................................',
+  '....................................',
+  '...#####W#####..........#####P####..',
+  '...#.........#..........#........#..',
+  '...#....J....P..........W....J...#..',
+  '...#.........#..........#........#..',
+  '...####.######..........####.#####..',
+  '....................................',
+  '..R..........####W####..............',
+  '..............................C.....',
+  '...........#.........#..............',
+  '...........P.........#..............',
+  '...........#.........W..............',
+  '...........###########..............',
+  '....................................',
+  '.....###P###.............####W###...',
+  '....................................',
+  '....................................',
+];
+MAPS.push(
+  { id: 'ls-1', kind: 'lesson', lesson: 1, name: 'Lesson 1: Lose the chaser', desc: 'Break its view, then walk away quietly', goal: { lost: 1 }, rows: rowsOf('workshop'),
+    teach: 'Running leaves scratch marks; walking leaves none. Get a wall between you and the chaser, then let go of run and walk away. When it reaches the end of your trail with nothing new to follow, it loses you.' },
+  { id: 'ls-2', kind: 'lesson', lesson: 2, name: 'Lesson 2: Fast vaults', desc: 'Run straight at a window and vault', goal: { fast: 3 }, rows: rowsOf('windows'),
+    teach: 'A fast vault needs a run-up: run straight at the window for about a metre, then press the action button. Coming in at an angle, or walking, gives a slow vault the chaser can punish.' },
+  { id: 'ls-3', kind: 'lesson', lesson: 3, name: 'Lesson 3: Pallet stun', desc: 'Drop a pallet on the chaser', goal: { stuns: 1 }, rows: rowsOf('pallets'),
+    teach: 'Stand on the far side of a standing pallet and drop it just as the chaser reaches it. If it is under the pallet when it falls, it is stunned for two seconds.' },
+  { id: 'ls-4', kind: 'lesson', lesson: 4, name: 'Lesson 4: Break line of sight', desc: 'Get out of its view three times', goal: { los: 3 }, rows: rowsOf('gauntlet'),
+    teach: 'The chaser only knows where you are while it can see you or your marks. Put walls between you: every time it loses sight of you for over a second counts.' },
+  { id: 'ls-5', kind: 'lesson', lesson: 5, name: 'Lesson 5: Hold a chase', desc: 'Last 45 seconds in chase', goal: { chase: 45 }, rows: rowsOf('gauntlet'),
+    teach: 'Put it all together: loop a wall, vault when you have the gap, drop pallets at the last safe moment, and move to a new loop before the chaser builds momentum.' },
+  { id: 'ch-hold', kind: 'challenge', name: 'Hold the Loop', desc: '60 s in chase without dropping a pallet', goal: { chase: 60, noDrop: true }, rows: rowsOf('workshop'),
+    teach: 'Windows and walls only. Keep the loop tight, and leave a window after two vaults so it does not jam.' },
+  { id: 'ch-saver', kind: 'challenge', name: 'Pallet Saver', desc: '60 s in chase, keep 2 pallets standing', goal: { chase: 60, standing: 2 }, rows: rowsOf('gauntlet'),
+    teach: 'Pallets are a budget. Use loops and windows first, and only drop a pallet when the gap has gone.' },
+  { id: 'ch-untouch', kind: 'challenge', name: 'Untouchable', desc: '40 s in chase without being hit', goal: { chase: 40, noHit: true }, rows: rowsOf('windows'),
+    teach: 'One hit ends it. Keep your distance, and never vault with the chaser right behind you.' },
+  { id: 'ch-breakout', kind: 'challenge', name: 'Breakout', desc: 'Finish both task boxes and escape', goal: { escape: true }, rows: BREAKOUT,
+    teach: 'Hold the action button at a task box to work on it; finishing one is loud. When both are done, an exit gate appears on the outer wall. Open it and get out.' },
+);
+// The drill list used to have 6 built-in drills. Custom drills come after the built-ins, so a remembered drill index moves along with them.
+(function () {
+  const n = MAPS.length, old = parseInt(store('lt_builtins'), 10) || 6, sm = parseInt(store('lt_map'), 10);
+  if (sm >= old && n !== old) store('lt_map', String(sm + n - old));
+  store('lt_builtins', String(n));
+})();
 
 loadCustom();
 const sm = parseInt(store('lt_map'), 10); if (sm >= 0 && sm < MAPS.length) mapIdx = sm;
@@ -4965,6 +5533,7 @@ function sndClaw() {                       // the claw arriving: a deep falling 
 }
 // Thunder: a close strike starts with a sharp crack; every strike rolls on as a low rumble that swells and fades.
 function sndThunder(near) {
+  caption(near > 0.55 ? 'THUNDER (close)' : 'thunder rumbles');
   const c = snd.ctx; if (!c || !snd.on || runner.taken) return;
   const t = c.currentTime + 0.01, vol = 0.25 + 0.55 * near, len = 2.6 + 1.6 * (1 - near);
   if (near > 0.55) {

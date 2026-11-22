@@ -176,7 +176,7 @@
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.1</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.2</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
@@ -214,6 +214,7 @@
       <option value="fog">Fog: short sight both ways</option>
       <option value="night">Night: you only see nearby</option>
       <option value="snow">Snow: tracks last longer, muffled</option>
+      <option value="storm">Thunderstorm: lightning shows you, thunder hides noise</option>
       <option value="dynamic">Changing: shifts during the run</option>
     </select></label>
 
@@ -2776,7 +2777,7 @@ function showMenu() {
 }
 function startRun() {
   leaveWorkspace(); settleFloors(); mode = 'play'; replay = null; $('replayBar').classList.add('hide');
-  wxPlan = makeWxPlan($('optWeather').value); wxSaid = 0; wxAt(0); loadMap(); setBars(false); buildDrills();
+  wxPlan = makeWxPlan($('optWeather').value); wxBolts = makeBolts(); wxSaid = 0; wxThunderI = 0; wxAt(0); loadMap(); setBars(false); buildDrills();
   $('overlay').classList.add('hide');
   say($('optNoChaser').checked ? 'Exploring: the chaser is switched off' : 'The chaser is hunting for you');
   recStart(); trainerStart();
@@ -3989,21 +3990,31 @@ function buzz(ms, strong) {
 // Weather, chosen at the start of each run. view: how far you can see in fog or at night (0 = no limit).
 // rain / fog / dark / snow say how strongly each shows on screen (0-1), so changing weather can blend between them.
 const WX_SET = {
-  clear: { name: 'clear', mark: 1, hear: 1, sight: 26, markSee: 10, view: 0, rain: 0, fog: 0, dark: 0, snow: 0 },
-  rain:  { name: 'rain', mark: 0.5, hear: 0.6, sight: 22, markSee: 8, view: 0, rain: 1, fog: 0, dark: 0, snow: 0 },
-  fog:   { name: 'fog', mark: 1, hear: 1, sight: 11, markSee: 6, view: 7.5, rain: 0, fog: 1, dark: 0, snow: 0 },
-  night: { name: 'night', mark: 1, hear: 1, sight: 15, markSee: 6, view: 6, rain: 0, fog: 0, dark: 1, snow: 0 },
-  snow:  { name: 'snow', mark: 1.8, hear: 0.75, sight: 20, markSee: 13, view: 0, rain: 0, fog: 0, dark: 0, snow: 1 },
+  clear: { name: 'clear', mark: 1, hear: 1, sight: 26, markSee: 10, view: 0, rain: 0, fog: 0, dark: 0, snow: 0, storm: 0 },
+  rain:  { name: 'rain', mark: 0.5, hear: 0.6, sight: 22, markSee: 8, view: 0, rain: 1, fog: 0, dark: 0, snow: 0, storm: 0 },
+  fog:   { name: 'fog', mark: 1, hear: 1, sight: 11, markSee: 6, view: 7.5, rain: 0, fog: 1, dark: 0, snow: 0, storm: 0 },
+  night: { name: 'night', mark: 1, hear: 1, sight: 15, markSee: 6, view: 6, rain: 0, fog: 0, dark: 1, snow: 0, storm: 0 },
+  snow:  { name: 'snow', mark: 1.8, hear: 0.75, sight: 20, markSee: 13, view: 0, rain: 0, fog: 0, dark: 0, snow: 1, storm: 0 },
+  storm: { name: 'storm', mark: 0.5, hear: 0.55, sight: 18, markSee: 7, view: 0, rain: 1, fog: 0, dark: 0, snow: 0, storm: 1 },
 };
 let WX = WX_SET.clear;
 // The weather plan for a run: a list of { t, name }. Fixed weather has one entry; changing weather gets a new
 // kind every 30-55 s, blending over WX_BLEND seconds. It is kept in the recording so replays match.
 const WX_BLEND = 8, WX_FAR = 30;
-const WX_SAY = { clear: 'The weather clears', rain: 'Rain sets in', fog: 'Fog rolls in', snow: 'It starts to snow' };
-let wxPlan = [{ t: 0, name: 'clear' }], wxSaid = 0;
+const WX_SAY = { clear: 'The weather clears', rain: 'Rain sets in', fog: 'Fog rolls in', snow: 'It starts to snow', storm: 'A storm is coming' };
+let wxPlan = [{ t: 0, name: 'clear' }], wxSaid = 0, wxBolts = [], wxThunderI = 0;
+// Lightning strike times for the whole run (only the ones that fall while a storm is on actually happen).
+// near: 1 = right overhead (bright, loud, thunder almost at once), 0 = far off.
+function makeBolts() {
+  const out = []; let t = 3 + Math.random() * 4;
+  while (t < 1200) { out.push({ t, x: 0.1 + Math.random() * 0.8, near: Math.random(), seed: Math.floor(Math.random() * 1e9) }); t += 5 + Math.random() * 11; }
+  for (const b of out) b.delay = 0.2 + (1 - b.near) * 2.6;
+  return out;
+}
+const flashVal = d => d < 0.07 ? 1 : d < 0.14 ? 0.25 : d < 0.2 ? 0.85 : Math.max(0, 0.85 * (1 - (d - 0.2) / 0.55));
 function makeWxPlan(choice) {
   if (choice !== 'dynamic') return [{ t: 0, name: WX_SET[choice] ? choice : 'clear' }];
-  const kinds = ['clear', 'rain', 'fog', 'snow'], plan = [];
+  const kinds = ['clear', 'rain', 'fog', 'snow', 'storm'], plan = [];
   let name = kinds[Math.floor(Math.random() * kinds.length)], t = 0;
   while (t < 1200) {
     plan.push({ t, name });
@@ -4012,23 +4023,48 @@ function makeWxPlan(choice) {
   }
   return plan;
 }
-function wxAt(t) {
-  if (wxPlan.length === 1) { WX = WX_SET[wxPlan[0].name]; return 0; }
+// The weather at time t, blended while it changes. Returns { w, i }: the settings and which part of the plan it is in.
+function wxMix(t) {
+  if (wxPlan.length === 1) return { w: WX_SET[wxPlan[0].name], i: 0 };
   let i = 0; while (i < wxPlan.length - 1 && wxPlan[i + 1].t <= t) i++;
   const b = WX_SET[wxPlan[i].name], k = i ? Math.min(1, (t - wxPlan[i].t) / WX_BLEND) : 1;
-  if (k >= 1) { WX = b; return i; }
+  if (k >= 1) return { w: b, i };
   const a = WX_SET[wxPlan[i - 1].name], w = {};
   for (const key in b) {
     if (key === 'name') continue;
     if (key === 'view') { const va = a.view || WX_FAR, vb = b.view || WX_FAR, v = va + (vb - va) * k; w.view = v >= WX_FAR - 0.5 ? 0 : v; }
     else w[key] = a[key] + (b[key] - a[key]) * k;
   }
-  w.name = k < 0.5 ? a.name : b.name; WX = w; return i;
+  w.name = k < 0.5 ? a.name : b.name; return { w, i };
 }
-// Called each frame of a run: updates the weather and says when it starts to change.
+const boltLive = b => wxMix(b.t).w.storm > 0.3;
+// Sets WX for time t. A lightning flash lights everything up, so the chaser can spot you (and your tracks) from far
+// away for a moment; while the thunder rolls it can barely hear you.
+function wxAt(t) {
+  const m = wxMix(t); WX = m.w;
+  if (!wxBolts.length || WX.storm <= 0.3) return m.i;
+  let flash = 0, bolt = null, rumble = false;
+  for (const b of wxBolts) {
+    if (b.t > t) break;
+    const d = t - b.t;
+    if (d < 0.8 && boltLive(b)) { const f = flashVal(d) * (0.55 + 0.45 * b.near); if (f > flash) { flash = f; bolt = b; } }
+    if (t >= b.t + b.delay && t < b.t + b.delay + 2.5 && boltLive(b)) rumble = true;
+  }
+  if (flash > 0 || rumble) {
+    WX = Object.assign({}, WX, { flash, bolt, boltD: bolt ? t - bolt.t : 9 });
+    if (flash > 0.4) { WX.sight = Math.max(WX.sight, 40); WX.markSee = Math.max(WX.markSee, 16); }
+    if (rumble) WX.hear *= 0.35;
+  }
+  return m.i;
+}
+// Called each frame of a run: updates the weather, says when it starts to change, and plays the thunder.
 function wxTick() {
   const i = wxAt(now);
   if (mode === 'play' && i > wxSaid) { wxSaid = i; say(WX_SAY[wxPlan[i].name] || ''); }
+  while (wxThunderI < wxBolts.length && wxBolts[wxThunderI].t + wxBolts[wxThunderI].delay <= now) {
+    const b = wxBolts[wxThunderI++];
+    if (mode === 'play' && now - b.t - b.delay < 0.5 && boltLive(b)) sndThunder(b.near);
+  }
 }
 const markLifeNow = () => CFG.markLife * WX.mark;
 const bloodLifeNow = () => CFG.bloodLife * WX.mark;
@@ -4070,7 +4106,7 @@ function withSeed(seed, fn) {
 let rec = null, lastRec = null, replay = null, lastCard = '';
 function recStart() {
   const sp = allSpecials();
-  rec = { map: mapIdx, id: MAPS[mapIdx].id, frames: [], marks: [], blood: [], ev: [], objs: sp.slice(), last: sp.map(s => s.state), next: 0, endStart: -1, wx: WX.name, wxPlan: wxPlan.slice() };
+  rec = { map: mapIdx, id: MAPS[mapIdx].id, frames: [], marks: [], blood: [], ev: [], objs: sp.slice(), last: sp.map(s => s.state), next: 0, endStart: -1, wx: WX.name, wxPlan: wxPlan.slice(), wxBolts };
 }
 function recTick(force) {
   if (!rec || (!force && now < rec.next)) return;
@@ -4089,7 +4125,7 @@ function recEnd() {
 function startReplay() {
   const R = lastRec;
   if (!R || R.map >= MAPS.length || MAPS[R.map].id !== R.id) { say('No replay for this drill'); return; }
-  mapIdx = R.map; leaveWorkspace(); settleFloors(); mode = 'replay'; wxPlan = R.wxPlan || [{ t: 0, name: WX_SET[R.wx] ? R.wx : 'clear' }]; wxAt(0);
+  mapIdx = R.map; leaveWorkspace(); settleFloors(); mode = 'replay'; wxPlan = R.wxPlan || [{ t: 0, name: WX_SET[R.wx] ? R.wx : 'clear' }]; wxBolts = R.wxBolts || []; wxAt(0);
   loadMap(); setBars(false);
   replay = { t: 0, speed: 1, playing: true, len: R.frames[R.frames.length - 1][0], fi: 0, ei: 0, objs: allSpecials().slice(), applied: 0 };
   $('overlay').classList.add('hide'); $('replayBar').classList.remove('hide');
@@ -4529,13 +4565,25 @@ function drawWeather() {
     }
     ctx.fill();
   }
-  if (WX.rain > 0.01) {
+  if (WX.rain > 0.01) {        // a storm adds darker skies and heavier, more slanted rain
     ctx.fillStyle = 'rgba(20,32,44,' + (0.22 * WX.rain).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh);
-    if (!rainDrops) rainDrops = Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]);
-    const n = Math.round(rainDrops.length * WX.rain);
+    if (WX.storm > 0.01) { ctx.fillStyle = 'rgba(6,10,20,' + (0.3 * WX.storm).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh); }
+    if (!rainDrops) rainDrops = Array.from({ length: 280 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]);
+    const n = Math.round(160 * WX.rain + 120 * WX.storm), sl = 3 + 4 * WX.storm;
     ctx.strokeStyle = 'rgba(170,200,220,.35)'; ctx.lineWidth = 1; ctx.beginPath();
-    for (let i = 0; i < n; i++) { const [u, v, sp] = rainDrops[i], y = ((v + t * sp) % 1) * (vh + 40) - 20, x = ((u + t * sp * 0.15) % 1) * vw; ctx.moveTo(x, y); ctx.lineTo(x - 3, y + 14); }
+    for (let i = 0; i < n; i++) { const [u, v, sp] = rainDrops[i], y = ((v + t * sp) % 1) * (vh + 40) - 20, x = ((u + t * sp * (0.15 + 0.2 * WX.storm)) % 1) * vw; ctx.moveTo(x, y); ctx.lineTo(x - sl, y + 14); }
     ctx.stroke();
+  }
+  if (WX.flash > 0.01) {       // lightning: the bolt itself for a split second, and the whole scene lit up
+    const b = WX.bolt;
+    if (b && WX.boltD < 0.22) {
+      let s = b.seed; const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+      const pts = [], end = vh * (0.45 + 0.45 * b.near); let x = b.x * vw, y = -10;
+      while (y < end) { pts.push([x, y]); y += 18 + rnd() * 30; x += (rnd() - 0.5) * 60; }
+      const stroke = (w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); pts.forEach(([px, py], j) => j ? ctx.lineTo(px, py) : ctx.moveTo(px, py)); ctx.stroke(); };
+      ctx.save(); ctx.lineJoin = 'round'; stroke(7, 'rgba(170,190,255,.35)'); stroke(2.2, 'rgba(250,252,255,.95)'); ctx.restore();
+    }
+    ctx.fillStyle = 'rgba(225,232,255,' + (0.42 * WX.flash).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh);
   }
   if (!(WX.fog > 0.01 || WX.dark > 0.01)) return;
   const view = WX.view || WX_FAR;
@@ -4783,7 +4831,8 @@ function sndInit() {
   for (let i = 0; i < sd.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; sd[i] = last * 3.5; }
   const bright = c.createBuffer(1, sr, sr), bd = bright.getChannelData(0);
   for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
-  snd.bright = bright;
+  snd.bright = bright; snd.soft = soft;
+  snd.thunder = c.createGain(); snd.thunder.gain.value = 0; snd.thunder.connect(snd.master);   // so the claw's silence cuts thunder too
   // ambience: wind that swells and shifts, over a low drone
   snd.amb = c.createGain(); snd.amb.gain.value = 0; snd.amb.connect(snd.master);
   const wind = c.createBufferSource(); wind.buffer = soft; wind.loop = true;
@@ -4914,6 +4963,22 @@ function sndClaw() {                       // the claw arriving: a deep falling 
   sndNote(t, 'sawtooth', 260, 0.95, 0.2, 0.3, snd.master, 70);
   sndNote(t, 'sine', 95, 0.95, 0.7, 0.05, snd.master, 40);
 }
+// Thunder: a close strike starts with a sharp crack; every strike rolls on as a low rumble that swells and fades.
+function sndThunder(near) {
+  const c = snd.ctx; if (!c || !snd.on || runner.taken) return;
+  const t = c.currentTime + 0.01, vol = 0.25 + 0.55 * near, len = 2.6 + 1.6 * (1 - near);
+  if (near > 0.55) {
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = snd.bright; f.type = 'highpass'; f.frequency.value = 900;
+    g.gain.setValueAtTime(0.5 * near, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    s.connect(f); f.connect(g); g.connect(snd.thunder); s.start(t); s.stop(t + 0.4);
+  }
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = snd.soft; s.loop = true; f.type = 'lowpass'; f.frequency.setValueAtTime(260 + 500 * near, t); f.frequency.exponentialRampToValueAtTime(90, t + len);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.12 + 0.3 * (1 - near));
+  g.gain.setTargetAtTime(vol * 0.55, t + 0.5, 0.3); g.gain.setTargetAtTime(vol * 0.8, t + 1.1, 0.25); g.gain.setTargetAtTime(0.0001, t + 1.6, len / 4);
+  s.connect(f); f.connect(g); g.connect(snd.thunder); s.start(t, Math.random() * 2); s.stop(t + len + 1.5);
+}
 function sndClash() {                      // the claw closing: one hard metallic crash, and then nothing
   const c = snd.ctx; if (!c || !snd.on) return;
   const t = c.currentTime + 0.01;
@@ -4957,13 +5022,14 @@ function sndTick() {
   // the instant the claw closes on you, one clash and every running sound is cut dead
   if (playing && runner.taken && runner.taken.t >= 0.95) {
     if (!runner.taken.clashed) { runner.taken.clashed = true; sndClash(); }
-    for (const k of ['amb', 'chase', 'end', 'eng', 'siren', 'grind', 'rain', 'wind']) { snd[k].gain.cancelScheduledValues(t); snd[k].gain.setTargetAtTime(0, t, 0.012); }
+    for (const k of ['amb', 'chase', 'end', 'eng', 'siren', 'grind', 'rain', 'wind', 'thunder']) { snd[k].gain.cancelScheduledValues(t); snd[k].gain.setTargetAtTime(0, t, 0.012); }
     snd.wasChase = false; return;
   }
   // once a gate is open the ambience stops and the collapse sound takes over, building until the timer runs out
   const ek = playing && endStart >= 0 ? Math.max(0, Math.min(1, (now - endStart) / CFG.endTime)) : -1;
   snd.amb.gain.setTargetAtTime(playing && ek < 0 ? (chasing ? 0.16 : 0.4) : 0, t, 0.6);             // kept low, and lower still under the music
-  snd.rain.gain.setTargetAtTime(playing ? 0.16 * WX.rain : 0, t, 0.8);
+  snd.rain.gain.setTargetAtTime(playing ? 0.16 * WX.rain + 0.08 * WX.storm : 0, t, 0.8);
+  snd.thunder.gain.setTargetAtTime(playing ? 1 : 0, t, 0.3);
   snd.wind.gain.setTargetAtTime(playing ? 0.22 * WX.snow : 0, t, 0.8);
   snd.end.gain.setTargetAtTime(ek < 0 ? 0 : 0.1 + 0.4 * ek, t, 0.4);
   if (ek >= 0) {

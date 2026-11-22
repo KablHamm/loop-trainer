@@ -194,7 +194,7 @@
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.5</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.6</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
@@ -218,7 +218,7 @@
       <option value="blinker">Blinker: blinks through walls toward you</option>
       <option value="howler">Howler: its howl marks you so it can track you</option>
       <option value="brute">Brute: smashes pallets fast, shrugs off stuns</option>
-    </select></label>
+    </select><button class="smallbtn" id="musicTry" title="Hear this chaser's chase music" style="padding:1px 8px;margin-left:4px">&#9835;</button></label>
     <label class="chk"><input type="checkbox" id="optAdapt"> Adaptive: improves as you win <span id="adaptLvl" style="color:var(--dim)"></span></label>
     <label class="chk"><input type="checkbox" id="optTwo"> Two players: a second player is the chaser</label>
 
@@ -5960,7 +5960,8 @@ function sndTick() {
     for (const o of snd.endOscs) o.detune.setTargetAtTime(300 * ek, t, 0.5);
     snd.endHi.gain.setTargetAtTime(ek > 0.4 ? 0.07 * (ek - 0.4) / 0.6 : 0, t, 0.5);
   }
-  snd.chase.gain.setTargetAtTime(chasing ? 0.8 : 0, t, chasing ? 0.12 : 0.8);
+  const prev = !playing && snd.on && snd.prevUntil > t;    // a menu preview of a chaser's music
+  snd.chase.gain.setTargetAtTime(chasing || prev ? 0.8 : 0, t, chasing || prev ? 0.12 : 0.8);
   // Task box engine: only heard within 8 m of a box that has been started, louder the closer you are,
   // and chugging faster and higher the nearer it is to done. A finished box runs smoothly.
   let loud = 0, prog = 0;
@@ -5985,14 +5986,129 @@ function sndTick() {
   snd.eng.gain.setTargetAtTime(loud * 0.5, t, 0.15);
   snd.engLfo.frequency.setTargetAtTime(3.5 + prog * 11, t, 0.2);
   snd.engOsc.frequency.setTargetAtTime(42 + prog * 48, t, 0.2);
+  if (prev) {
+    const th = chaseTheme(snd.prevType), sd = 60 / th.bpm / 4;
+    snd.lp.frequency.setTargetAtTime(3800, t, 0.1);
+    if (!snd.wasPrev) { snd.next = t + 0.05; snd.step = 0; snd.wasPrev = true; }
+    while (snd.next < t + 0.14 && snd.next < snd.prevUntil - 0.1) { th.step(snd.step, snd.next, 0, sd, 1); snd.next += sd; snd.step = (snd.step + 1) & 31; }
+    snd.wasChase = false; return;
+  }
+  snd.wasPrev = false;
   if (!chasing) { snd.wasChase = false; return; }
   const near = Math.max(0, Math.min(1, 1 - Math.hypot(runner.x - chaser.x, runner.y - chaser.y) / 14));
   snd.lp.frequency.setTargetAtTime(650 + near * near * 4200, t, 0.25);
-  const stepDur = 60 / (128 + chaser.tier * 6) / 4;
+  const theme = chaseTheme(chaserLook(chaser)), stepDur = 60 / (theme.bpm + chaser.tier * 6) / 4, up = Math.pow(2, chaser.tier / 12);
   if (!snd.wasChase) { sndSting(t); snd.next = t + 0.3; snd.step = 0; snd.wasChase = true; }
   if (snd.next < t) snd.next = t + 0.02;                                                   // came back from a pause: don't play a backlog
-  while (snd.next < t + 0.14) { sndStep(snd.step, snd.next, chaser.tier, stepDur); snd.next += stepDur; snd.step = (snd.step + 1) & 31; }
+  while (snd.next < t + 0.14) { theme.step(snd.step, snd.next, chaser.tier, stepDur, up); snd.next += stepDur; snd.step = (snd.step + 1) & 31; }
 }
+/* ----- v1.6: every chaser type has its own chase music. Each theme is two bars of sixteen steps. ----- */
+function sndHit(t, vol, dur, ftype, freq, q, attack) {   // a filtered noise hit: snares, shakers, ratchets, whispers
+  const c = snd.ctx, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = snd.bright; s.loop = dur > 0.9; f.type = ftype; f.frequency.value = freq; f.Q.value = q || 0.8;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + (attack || 0.003)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(snd.chase); s.start(t); s.stop(t + dur + 0.02);
+}
+const sKick = (t, vol, from, to, dur) => sndNote(t, 'sine', from || 130, dur || 0.28, vol, 0.004, null, to || 42);
+const sChord = (t, type, fs, dur, vol, att, det) => { for (const f of fs) for (const d of (det ? [1 - det, 1 + det] : [1])) sndNote(t, type, f * d, dur, vol, att); };
+
+const CHASE_THEMES = {
+  standard: { bpm: 128, step: (step, t, tier, sd) => sndStep(step, t, tier, sd) },
+
+  // Sprinter: fast and driving. Pumping octave bass on every step, constant hi-hats, a racing arpeggio.
+  sprinter: { bpm: 152, step(step, t, tier, sd, up) {
+    const s = step & 15, B = [73.42, 87.31, 65.41, 98][(step >> 2) & 3];
+    if (s % 4 === 0) sKick(t, 0.85);
+    sndNote(t, 'sawtooth', B * up * (s % 2 ? 2 : 1), sd * 0.9, 0.15, 0.005);
+    sndTick2(t, s % 2 ? 0.1 : 0.05, 0.03);
+    if (s === 4 || s === 12) sndHit(t, 0.28, 0.12, 'bandpass', 1800, 0.9);
+    if (s % 2 === 1) sndNote(t, 'square', [293.66, 349.23, 440, 523.25, 587.33, 523.25, 440, 349.23][(step >> 1) & 7] * up * 2, sd * 1.1, 0.025, 0.004);
+  } },
+
+  // Charger: slow and stomping. War drums, a long low bass and blaring brass stabs.
+  charger: { bpm: 96, step(step, t, tier, sd, up) {
+    const s = step & 15, bar = step >> 4;
+    if (s === 0 || s === 8) sKick(t, 0.9, 110, 45, 0.4);
+    if (s === 3 || s === 6 || s === 11 || (tier >= 1 && s === 14)) sKick(t, 0.55, 95, 48, 0.3);
+    if (s === 4 || s === 12) sndHit(t, 0.38, 0.2, 'bandpass', 1100, 0.7);
+    if (s % 8 === 0) sndNote(t, 'sawtooth', (bar ? 51.91 : 55) * up, sd * 7.5, 0.24, 0.02);
+    if (s === 0 || s === 10) sChord(t, 'sawtooth', (s ? [138.59, 164.81, 207.65] : [146.83, 174.61, 220]).map(f => f * up), sd * 3, 0.045, 0.02, 0.004);
+  } },
+
+  // Lurker: slow and sparse. A heartbeat, a sour low drone, stray glassy notes and a whisper.
+  lurker: { bpm: 84, step(step, t, tier, sd, up) {
+    const s = step & 15, bar = step >> 4;
+    if (s === 0) sKick(t, 0.7, 80, 40, 0.3);
+    if (s === 2) sKick(t, 0.45, 80, 40, 0.25);
+    if (tier >= 2 && (s === 8 || s === 10)) sKick(t, s === 8 ? 0.55 : 0.35, 80, 40, 0.25);
+    if (s === 0 && !bar) { sndNote(t, 'sine', 55 * up, sd * 32, 0.14, sd * 8); sndNote(t, 'sine', 58.27 * up, sd * 32, 0.06, sd * 8); }
+    if (s === 5 || s === 11 || s === 14) sndNote(t, 'triangle', [880, 932.33, 1046.5, 739.99][(step * 7 + bar) & 3] * up, 0.7, 0.035, 0.01);
+    if (s === 8) sndHit(t, 0.07, sd * 6, 'bandpass', 3000, 0.5, sd * 3);
+  } },
+
+  // Trapper: mechanical. A ratchet ticking on every step, metal clanks, a choppy bass and a snap.
+  trapper: { bpm: 120, step(step, t, tier, sd, up) {
+    const s = step & 15, bar = step >> 4;
+    sndHit(t, s % 4 === 0 ? 0.09 : 0.045, 0.03, 'highpass', 5000);
+    if (s % 4 === 0) { sndNote(t, 'triangle', 1250 * up, 0.18, 0.045, 0.002); sndNote(t, 'triangle', 1873 * up, 0.14, 0.03, 0.002); }
+    if (s === 0 || s === 6 || s === 10) sKick(t, 0.8);
+    const f = [55, 0, 55, 65.41, 0, 55, 73.42, 0, 55, 0, 82.41, 65.41, 0, 55, 49, 0][s];
+    if (f) sndNote(t, 'sawtooth', f * up * (bar && s > 8 ? 1.06 : 1), sd * 1.2, 0.2, 0.005);
+    if (s === 12) { sndHit(t, 0.35, 0.08, 'bandpass', 2500, 1.2); sndNote(t, 'sine', 420, 0.1, 0.25, 0.002, null, 90); }
+  } },
+
+  // Tracker: a hunt. Tribal drums in a 3-3-2 pattern, a shaker, an open-fifth drone and a sniff.
+  tracker: { bpm: 112, step(step, t, tier, sd, up) {
+    const s = step & 15, bar = step >> 4;
+    if (s === 0 || s === 3 || s === 6) sKick(t, 0.65, 160, 70, 0.22);
+    if (s === 8 || s === 11 || s === 14) sKick(t, 0.6, 120, 55, 0.24);
+    if (s === 0) sKick(t, 0.35);
+    if (s % 2 === 1) sndHit(t, 0.05, 0.06, 'highpass', 4000);
+    if (s === 0) { sndNote(t, 'sawtooth', 73.42 * up, sd * 16, 0.05, sd * 4); sndNote(t, 'sawtooth', 110 * up, sd * 16, 0.035, sd * 4); }
+    if (bar && s === 13) { sndHit(t, 0.12, 0.07, 'bandpass', 1500, 2); sndHit(t + sd * 0.5, 0.12, 0.07, 'bandpass', 1700, 2); }
+    if (tier >= 1 && s % 4 === 2) sndNote(t, 'triangle', [293.66, 329.63, 293.66, 220][(step >> 2) & 3] * up, sd * 1.5, 0.05, 0.005);
+  } },
+
+  // Blinker: electronic and unsettled. A fast arpeggio, a deep sub, laser zaps and a shimmering pad.
+  blinker: { bpm: 132, step(step, t, tier, sd, up) {
+    const s = step & 15;
+    if (s % 4 === 0) { sndNote(t, 'sine', 55 * up, sd * 3.5, 0.35, 0.01); sKick(t, 0.55); }
+    sndNote(t, 'square', [440, 659.25, 880, 1318.5, 880, 659.25, 554.37, 830.61][step & 7] * up, sd * 0.9, 0.022, 0.003);
+    if (s === 6 || s === 14) sndNote(t, 'sine', 2000, 0.2, 0.07, 0.004, null, 200);
+    if (s % 2 === 1) sndTick2(t, 0.05, 0.03);
+    if (s === 0) sChord(t, 'triangle', [220, 261.63, 329.63].map(f => f * up), sd * 16, 0.025, sd * 4, 0.006);
+  } },
+
+  // Howler: a minor-key pounding beat, with a wailing slide on top and a low choir.
+  howler: { bpm: 104, step(step, t, tier, sd, up) {
+    const s = step & 15, bar = step >> 4;
+    if (s % 4 === 0 || (tier >= 1 && s === 14)) sKick(t, 0.85);
+    if (s === 4 || s === 12) sndHit(t, 0.3, 0.15, 'bandpass', 1500, 0.8);
+    if (s % 2 === 0) sndNote(t, 'sawtooth', [55, 55, 65.41, 55, 61.74, 55, 49, 51.91, 55, 55, 65.41, 73.42, 69.3, 65.41, 61.74, 51.91][(step >> 1) & 15] * up, sd * 1.8, 0.2, 0.01);
+    if (s === 0) {
+      sndNote(t, 'triangle', (bar ? 392 : 330) * up, sd * 14, 0.07, sd * 3, null, (bar ? 330 : 440) * up);
+      sChord(t, 'sawtooth', [110, 130.81, 164.81].map(f => f * up), sd * 16, 0.022, sd * 6, 0.005);
+    }
+  } },
+
+  // Brute: slow and crushing. Heavy double kicks, a low power chord and a clanging anvil.
+  brute: { bpm: 90, step(step, t, tier, sd, up) {
+    const s = step & 15, bar = step >> 4;
+    if (s === 0 || s === 2 || s === 8 || s === 10 || (tier >= 1 && s === 11)) sKick(t, 0.95, 120, 35, 0.4);
+    if (s === 0 || s === 6 || s === 8 || (bar && s === 12)) sChord(t, 'sawtooth', [82.41, 123.47].map(f => f * up * (bar && s === 12 ? 0.94 : 1)), sd * 4, 0.07, 0.008, 0.006);
+    if (s === 4 || s === 12) { sndHit(t, 0.45, 0.22, 'bandpass', 900, 0.8); sndNote(t, 'triangle', 600, 0.25, 0.06, 0.002); }
+    if (s % 4 === 2) sndTick2(t, 0.06, 0.04);
+  } },
+};
+const chaseTheme = type => CHASE_THEMES[type] || CHASE_THEMES.standard;
+// Play two bars of a chaser's music from the menu.
+function tryMusic() {
+  if (!snd.on) { say('Turn on sound first (Ambient sound and chase music)'); return; }
+  sndInit(); if (!snd.ctx) return; if (snd.ctx.state === 'suspended') snd.ctx.resume();
+  const type = $('optType').value, th = chaseTheme(type);
+  snd.prevType = type; snd.prevUntil = snd.ctx.currentTime + 32 * 60 / th.bpm / 4 + 0.1; snd.wasPrev = false;
+}
+$('musicTry').addEventListener('click', e => { e.preventDefault(); e.currentTarget.blur(); tryMusic(); });
 // Browsers only allow sound after you have pressed or tapped something.
 for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { sndInit(); if (snd.ctx && snd.ctx.state === 'suspended') snd.ctx.resume(); }, true);
 document.addEventListener('visibilitychange', () => { if (snd.ctx) { if (document.hidden) snd.ctx.suspend(); else if (snd.on) snd.ctx.resume(); } });

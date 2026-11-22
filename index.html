@@ -194,7 +194,7 @@
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.4</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.5</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
@@ -210,13 +210,13 @@
     </div>
     <label class="row">Type <select id="optType">
       <option value="standard">Standard</option>
-      <option value="sprinter">Sprinter: fast, corners badly</option>
+      <option value="sprinter">Sprinter: builds up speed on straights, corners badly</option>
       <option value="charger">Charger: slower, charges at you</option>
       <option value="lurker">Lurker: hard to see until close</option>
       <option value="trapper">Trapper: lays hidden traps</option>
       <option value="tracker">Tracker: follows tracks from far away</option>
-      <option value="blinker">Blinker: blinks ahead along its route</option>
-      <option value="howler">Howler: howls to find where you are</option>
+      <option value="blinker">Blinker: blinks through walls toward you</option>
+      <option value="howler">Howler: its howl marks you so it can track you</option>
       <option value="brute">Brute: smashes pallets fast, shrugs off stuns</option>
     </select></label>
     <label class="chk"><input type="checkbox" id="optAdapt"> Adaptive: improves as you win <span id="adaptLvl" style="color:var(--dim)"></span></label>
@@ -1566,6 +1566,7 @@ function updateChaser(dt) {
       if (bb) { c.kx = bb.x; c.ky = bb.y; c.kf = c.floor; c.kvia = -1; c.markT = bb.t; lead = true; c.leadKind = 'marks'; }
     }
   }
+  if (!c.saw && howlMarked(r, same)) { c.kx = r.x; c.ky = r.y; c.kf = c.floor; c.kvia = -1; c.markT = now; lead = true; c.leadKind = 'sight'; }   // marked by a howl: it knows where you are
   if (lead) { c.lastLeadT = now; c.onLead = true; c.poke = false; }
   let arrived = c.floor === c.kf && Math.hypot(c.x - c.kx, c.y - c.ky) < (c.poke ? 0.4 : 1.2);   // when poking into a bush it goes right in
   if (!lead && arrived && c.kvia >= 0) { c.kf = c.kvia; c.kvia = -1; c.repath = 0; c.lastLeadT = now; arrived = false; }   // take the stairs after you
@@ -1751,7 +1752,8 @@ function updateChaser(dt) {
     c.tier = c.chaseT > D.tiers[2] ? 3 : c.chaseT > D.tiers[1] ? 2 : c.chaseT > D.tiers[0] ? 1 : 0;
     stats.maxTier = Math.max(stats.maxTier, c.tier);
   }
-  const speed = (D.speed + c.tier * 0.2) * speedMul * (GROUND_SPEED[groundAt(c.x, c.y)] || 1) * (c.slowT > 0 ? 0.4 : 1);
+  let speed = (D.speed + c.tier * 0.2) * speedMul * (GROUND_SPEED[groundAt(c.x, c.y)] || 1) * (c.slowT > 0 ? 0.4 : 1);
+  if (D.type === 'sprinter') speed += sprintMomentum(c, dt) * SPRINT_MAX * speedMul;
 
   // mind game: stop short of a standing pallet you are waiting at, to bait you into dropping it early
   if (c.state === 'chase' && c.saw && c.inChase && D.bait > 0 && now > (c.baitNext || 0)) {
@@ -1767,10 +1769,10 @@ function updateChaser(dt) {
   // a trapper sets traps along its patrol while it has no idea where you are
   if (D.type === 'trapper' && c.state === 'chase' && !c.inChase && !lead && trapperWants(c)) { c.state = 'settrap'; c.t = 1.2; return; }
   // a howler stops to howl now and then: unless you are hidden, the howl gives away where you are
-  if (D.type === 'howler' && c.state === 'chase' && !c.inChase && !lead && now > (c.howlNext || 14)) { startHowl(c); return; }
+  if (D.type === 'howler' && c.state === 'chase' && !c.saw && now > (c.howlNext || 8) && (!c.inChase || (c.losFrom && now - c.losFrom > 1.2))) { startHowl(c); return; }
   // a blinker that sees you a fair way off blinks ahead along its route
-  if (D.type === 'blinker' && c.state === 'chase' && c.saw && c.inChase && now > (c.blinkNext || 6) && dist > 5 && dist < 13 && c.path && c.path.length > 6) {
-    c.state = 'blinkup'; c.t = BLINK_T; c.blinkNext = now + 11; caption('a hum builds', c.x, c.y); sndBlink(true); return;
+  if (D.type === 'blinker' && c.state === 'chase' && c.inChase && lead && now > (c.blinkNext || 6) && blinkWanted(c, r)) {
+    c.state = 'blinkup'; c.t = BLINK_T; c.blinkNext = now + 10; caption('a hum builds', c.x, c.y); sndBlink(true); return;
   }
   // a charger winds up, then charges a long way in a straight line
   if (D.type === 'charger' && c.state === 'chase' && c.saw && now > (c.chargeNext || 0) && dist > 2.8 && dist < 7 && walkClear(c.x, c.y, r.x, r.y, 0.3)) {
@@ -3532,15 +3534,15 @@ function draw() {
   if (rShown) drawPerson(r.x, r.y, r.face, r.r, PAL.run, '#e8c9a0', rMoving ? now * (r.running || r.vault ? 16 : 9) : null, false);
   if (r.hp < 2 && rShown) { ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .07; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .08, 0, 7); ctx.stroke(); }
   if (r.boost > 0 && rShown) { ctx.strokeStyle = 'rgba(79,209,181,.5)'; ctx.lineWidth = .05; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .15, 0, 7); ctx.stroke(); }
-  if (rShown) drawAbilityFx(r);
+  if (rShown) { drawAbilityFx(r); drawHowlMark(r); }
 
   // chaser: hidden behind walls unless the aid is on
   const visible = mode !== 'play' || c.state === 'carry' || c.human || (c.sees && chaserInView(c, r));
   if ((visible || $('optAura').checked) && !noChaser && c.floor === vf) {
     ctx.globalAlpha = visible ? 1 : 0.4;
     const cMoving = (mode === 'play' || mode === 'replay') && (c.state === 'chase' || c.state === 'lunge' || c.state === 'cool' || c.state === 'vault' || c.state === 'carry');
-    drawPerson(c.x, c.y, c.face, c.r, c.state === 'stun' ? '#7a5a56' : c.state === 'blinkup' ? '#9b7bff' : (c.state === 'lunge' || c.state === 'windup') ? PAL.lunge : PAL.chase,
-               '#2a1513', cMoving ? now * (c.state === 'cool' ? 6 : 16) : null, true, c.state === 'lunge');
+    drawChaser(c, c.state === 'stun' ? '#7a5a56' : c.state === 'blinkup' ? '#9b7bff' : (c.state === 'lunge' || c.state === 'windup') ? PAL.lunge : PAL.chase,
+               cMoving ? now * (c.state === 'cool' ? 6 : 16) : null);
     if (mode === 'play' && (c.state === 'break' || c.state === 'stun' || c.state === 'cool' || c.state === 'kick' || c.state === 'opengate' || c.state === 'windup' || c.state === 'settrap' || c.state === 'check' || c.state === 'howl' || c.state === 'blinkup')) {
       const full = c.state === 'howl' ? HOWL_T : c.state === 'blinkup' ? BLINK_T : c.state === 'settrap' ? 1.2 : c.state === 'check' ? 1.2 : c.state === 'windup' ? 0.55 : c.state === 'break' ? breakTimeNow() : c.state === 'stun' ? stunTimeNow() : c.state === 'kick' ? CFG.kickTime : c.state === 'opengate' ? CFG.chaserGateTime : CFG.hitCool;
       ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .08; ctx.beginPath();
@@ -4185,7 +4187,7 @@ const adaptLevel = () => Math.max(0, Math.min(10, parseInt(store('lt_adapt_' + d
 function chaserProfile() {
   const D = Object.assign({}, DIFF[diffKey]), type = $('optType').value, L = $('optAdapt').checked ? adaptLevel() : 0;
   D.type = type; D.bait = diffKey === 'easy' ? 0 : diffKey === 'normal' ? 0.3 : 0.55;
-  if (type === 'sprinter') { D.speed += 0.45; D.turn *= 0.5; D.slack += 0.25; }
+  if (type === 'sprinter') { D.speed -= 0.15; D.turn *= 0.4; D.slack += 0.3; }
   else if (type === 'charger') D.speed -= 0.3;
   else if (type === 'lurker') D.speed -= 0.1;
   else if (type === 'tracker') D.speed -= 0.15;
@@ -4946,10 +4948,13 @@ const breakTimeNow = () => CFG.breakTime * (isBrute() ? 0.35 : 1);
 const stunTimeNow = () => CFG.stunTime * (isBrute() ? 0.55 : 1);
 const chaserVaultNow = () => CFG.chaserVault * (isBrute() ? 1.35 : 1);
 const TYPE_HELP = {
+  sprinter: '<b>Sprinter:</b> starts slow but builds up a lot of speed on a long straight, and loses it all when it turns sharply. Keep it turning: tight loops and corners beat it, open ground does not.',
+  charger: '<b>Charger:</b> slower, but when it has a clear line to you it winds up and charges a long way in a straight line. Sidestep the charge, then loop it.',
+  lurker: '<b>Lurker:</b> you cannot see it until it is within about 7 tiles. Listen for the chase and watch your corners.',
   trapper: '<b>Trapper:</b> while it hunts it sets traps you only spot up close. Step in one and you are stuck for a few seconds (mash the action button) while it comes running.',
   tracker: '<b>Tracker:</b> a little slower, but it spots your scratch marks and blood from much further away, in every direction. Walk more, and break the trail.',
-  blinker: '<b>Blinker:</b> when it sees you a fair way off, it glows purple for a moment, then blinks several tiles ahead along its route. Break line of sight before it blinks, or turn as it does.',
-  howler: '<b>Howler:</b> while it hunts it stops to howl every 20 s or so. If you are within earshot and not hidden in a locker or bush when the howl ends, it knows where you are.',
+  blinker: '<b>Blinker:</b> when it knows where you are, it glows purple for a moment, then blinks up to 8 tiles toward you, straight through walls. It lands a few tiles short: as soon as it starts to glow, change direction.',
+  howler: '<b>Howler:</b> every 15 s or so, whenever it cannot see you, it stops and howls. Be out in the open when the howl ends and you are <i>marked</i> for 6 s: it knows exactly where you are, even through walls. Duck into a locker or bush before the howl ends to avoid it, or to shake the mark off.',
   brute: '<b>Brute:</b> smashes pallets in under a second and recovers from stuns quickly, but it is slow over windows. Loop windows rather than pallets.',
 };
 
@@ -5034,44 +5039,197 @@ function throwDecoy(r) {
   floatText(c.x, c.y - .9, '?', '#f0b648');
 }
 
-// Blinker: jumps up to 6 tiles along its route toward you, stopping short of you, stairs and anything in the way.
+// Blinker: glows, then blinks up to 8 tiles straight toward where it knows you are, walls or not.
+// It lands a few tiles short, never inside a wall, and never in a pocket it could not walk out of.
+const blinkTarget = (c, r) => c.saw ? [r.x + r.vx * 0.3, r.y + r.vy * 0.3] : [c.kx, c.ky];
+function blinkWanted(c, r) {
+  if (!c.saw && c.kf !== c.floor) return false;
+  const [tx, ty] = blinkTarget(c, r), d = Math.hypot(tx - c.x, ty - c.y);
+  if (d < 5.5 || d > 13) return false;
+  if (!walkClear(c.x, c.y, tx, ty, 0.3)) return true;   // a wall in the way: blink through it
+  return d > 7.5;                                     // in the open, only from a fair way off
+}
 function blinkJump(c, r) {
-  const N = W * H, cell = Math.floor(c.y) * W + Math.floor(c.x), here = c.floor * N + cell;
-  const path = r.floor === c.floor ? findPath(here, c.floor * N + Math.floor(r.y) * W + Math.floor(r.x), {}) : null;
-  if (!path || path.length < 3) return;
-  let k = 0;
-  for (let j = 1; j < Math.min(path.length, 7); j++) {
-    const fj = (path[j] / N) | 0, ij = path[j] - fj * N;
-    if (fj !== c.floor || blocking(spec[ij]) || STAIR[ij] || AIR[ij] || PBLOCK[ij]) break;
-    if (Math.hypot((ij % W) + .5 - r.x, ((ij / W) | 0) + .5 - r.y) < 4) break;   // it lands a few tiles short, so you still have a moment to react
-    k = j;
+  const [tx, ty] = blinkTarget(c, r), d = Math.hypot(tx - c.x, ty - c.y); if (d < 2) return false;
+  const ux = (tx - c.x) / d, uy = (ty - c.y) / d, N = W * H;
+  const gx = Math.floor(tx), gy = Math.floor(ty), goal = c.floor * N + gy * W + gx;
+  for (let k = Math.min(8, d - 3.5); k >= 2; k -= 0.25) {
+    const x = c.x + ux * k, y = c.y + uy * k, cx = Math.floor(x), cy = Math.floor(y), i = cy * W + cx;
+    if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) continue;
+    if (isSolid(cx, cy) || VOID[i] || AIR[i] || STAIR[i] || PBLOCK[i] || blocking(spec[i]) || PROP[i] === 'G' || EXITL[i]) continue;
+    if (r.floor === c.floor && Math.hypot(cx + .5 - r.x, cy + .5 - r.y) < 3.2) continue;
+    if (!findPath(c.floor * N + i, goal, {})) continue;
+    const fx = c.x, fy = c.y;
+    c.x = cx + .5; c.y = cy + .5; c.face = Math.atan2(uy, ux); resolve(c); c.trail = [];
+    for (const [px, py] of [[fx, fy], [c.x, c.y]]) {
+      puffs.push({ x: px, y: py, f: c.floor, t: now });
+      if (rec) rec.ev.push({ t: now, k: 'puff', x: px, y: py, f: c.floor });
+    }
+    sndBlink(false); stats.blinks = (stats.blinks || 0) + 1;
+    if (!walkClear(fx, fy, c.x, c.y, 0.1)) caption('it blinked through the wall', c.x, c.y);
+    return true;
   }
-  if (!k) return;
-  const ik = path[k] - c.floor * N, fx = c.x, fy = c.y;
-  c.x = (ik % W) + .5; c.y = ((ik / W) | 0) + .5; resolve(c);
-  for (const [x, y] of [[fx, fy], [c.x, c.y]]) {
-    puffs.push({ x, y, f: c.floor, t: now });
-    if (rec) rec.ev.push({ t: now, k: 'puff', x, y, f: c.floor });
-  }
-  sndBlink(false); stats.blinks = (stats.blinks || 0) + 1;
+  return false;
 }
 
-// Howler: stands still and howls. When the howl ends, anyone within earshot and not hidden is found.
+// Howler: whenever it can't see you it stops now and then to howl. Out in the open when the howl ends,
+// you are marked for a few seconds and it knows where you are, even through walls. Hiding clears the mark.
+const HOWL_MARK = 6;
 function startHowl(c) {
-  c.howlNext = now + 20 + Math.random() * 8; c.state = 'howl'; c.t = HOWL_T;
+  c.howlNext = now + 13 + Math.random() * 5; c.state = 'howl'; c.t = HOWL_T;
   const r = runner;
-  if (r.floor === c.floor && Math.hypot(c.x - r.x, c.y - r.y) < 30) say('The howler is calling… hide!');
+  if (r.floor === c.floor && Math.hypot(c.x - r.x, c.y - r.y) < HOWL_R + 4) say('The howler is calling… hide!');
   caption('a long howl', c.x, c.y); sndHowl();
 }
 function howlStep(c, r, dt, same, dist) {
   if (c.saw) { c.state = 'chase'; return; }
   c.t -= dt; if (c.t > 0) return;
   c.state = 'chase';
-  if (same && dist < HOWL_R * WX.hear && !r.hidden && !r.bushHide && !r.carried && !r.hooked) {
+  if (!same || dist >= HOWL_R * WX.hear || r.carried || r.hooked) return;
+  if (!r.hidden && !r.bushHide) {
+    r.howlMark = now + HOWL_MARK;
     c.kx = r.x; c.ky = r.y; c.kf = r.floor; c.kvia = -1; c.markT = now; c.lastLeadT = now; c.onLead = true; c.repath = 0;
     c.lockerTarget = null; c.taskTarget = null;
-    floatText(r.x, r.y - 1.1, 'found!', '#e2503f'); say('The howl found you!'); stats.howlFound = (stats.howlFound || 0) + 1;
-  } else if (same && dist < HOWL_R * WX.hear) { say('The howl missed you — you were hidden'); stats.howlHid = (stats.howlHid || 0) + 1; }
+    floatText(r.x, r.y - 1.1, 'marked!', '#e2503f'); say('Marked! It knows where you are for ' + HOWL_MARK + ' s — hide to shake it off');
+    if (rec) rec.ev.push({ t: now, k: 'fx', x: r.x, y: r.y - 1.1, txt: 'marked!', col: '#e2503f' });
+    stats.howlFound = (stats.howlFound || 0) + 1; buzz(120, .5);
+  } else { say('The howl missed you — you were hidden'); stats.howlHid = (stats.howlHid || 0) + 1; }
+}
+function howlMarked(r, same) {
+  if (!(r.howlMark > now)) return false;
+  if (r.hidden || r.bushHide) { r.howlMark = 0; say('Hidden — the mark is gone'); return false; }
+  return same && !r.carried && !r.hooked;
+}
+function drawHowlMark(r) {
+  if (!(r.howlMark > now) || mode !== 'play') return;
+  const left = r.howlMark - now, pulse = 0.5 + 0.5 * Math.sin(now * 10);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(226,80,63,' + (0.45 + 0.4 * pulse).toFixed(2) + ')'; ctx.lineWidth = .07;
+  ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .3 + pulse * .08, 0, 7); ctx.stroke();
+  // a claw-mark sign over your head, with the time left as a shrinking arc
+  ctx.translate(r.x, r.y - r.r - .55); ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .06;
+  for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(k * .1 - .05, -.16); ctx.lineTo(k * .1 + .05, .16); ctx.stroke(); }
+  ctx.globalAlpha = .7; ctx.beginPath(); ctx.arc(0, 0, .26, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * left / HOWL_MARK); ctx.stroke();
+  ctx.restore();
+}
+
+// Sprinter: picks up speed the longer it runs straight, and loses it on sharp turns.
+const SPRINT_MAX = 1.8;
+function sprintMomentum(c, dt) {
+  if (now - (c.momT || -9) > 0.1) { c.mom = 0; c.momFace = c.face; }   // it was busy (swinging, breaking, vaulting, stunned): start again
+  c.momT = now;
+  let d = c.face - (c.momFace === undefined ? c.face : c.momFace);
+  while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  c.momFace = c.face;
+  const rate = Math.abs(d) / Math.max(dt, 1e-3), m = c.mom || 0;
+  if (c.state === 'cool') c.mom = Math.max(0, m - dt * 3);
+  else if (rate > 2.0) c.mom = Math.max(0, m - dt * 4);
+  else c.mom = Math.min(1, m + dt / 1.8);
+  return c.mom;
+}
+
+/* ----- Each chaser type has its own look ----- */
+function chaserLook(c) {
+  if (c.human) return 'standard';
+  if (mode === 'menu' || mode === 'edit' || !CH) return $('optType').value;
+  return CH.type || 'standard';
+}
+function drawChaser(c, body, phase) {
+  const t = chaserLook(c), r = c.r, swing = c.state === 'lunge';
+  // things drawn under the body
+  if (t === 'sprinter' && (c.mom || 0) > 0.15 && phase !== null) {   // speed lines streaming off behind it
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.face);
+    ctx.strokeStyle = 'rgba(240,182,72,' + (0.6 * c.mom).toFixed(2) + ')'; ctx.lineWidth = .045;
+    for (const [oy, len] of [[-.32, 1], [0, 1.4], [.32, 1]]) {
+      const l0 = r * 1.2, l1 = r * (1.2 + len * 1.8 * c.mom);
+      ctx.beginPath(); ctx.moveTo(-l0, oy); ctx.lineTo(-l1, oy); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (t === 'blinker') {   // fading afterimages trail behind it
+    if (!c.trail) c.trail = [];
+    if (!c.trailT || now - c.trailT > 0.06 || now < c.trailT) { c.trailT = now; c.trail.push([c.x, c.y, c.face]); if (c.trail.length > 5) c.trail.shift(); }
+    ctx.save();
+    c.trail.forEach(([x, y], i) => { ctx.globalAlpha = 0.07 + i * 0.04; ctx.fillStyle = '#9b7bff'; ctx.beginPath(); ctx.arc(x, y, r * 1.05, 0, 7); ctx.fill(); });
+    ctx.restore();
+  }
+  if (t === 'lurker') {    // a dark haze it moves in
+    const g = ctx.createRadialGradient(c.x, c.y, r * .5, c.x, c.y, r * 2.4);
+    g.addColorStop(0, 'rgba(10,6,10,.55)'); g.addColorStop(1, 'rgba(10,6,10,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.4, 0, 7); ctx.fill();
+  }
+  const scale = t === 'brute' ? 1.3 : t === 'sprinter' ? 0.9 : 1;
+  const head = t === 'lurker' ? '#120c0e' : t === 'howler' ? '#3b3532' : t === 'blinker' ? '#2a2140' : '#2a1513';
+  drawPerson(c.x, c.y, c.face, r * scale, body, head, phase, t !== 'brute', swing);
+
+  // things drawn on top, turned to face where it faces
+  const R = r * scale, sw = phase === null ? 0 : Math.sin(phase);
+  ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.face); ctx.lineJoin = 'round';
+  if (t === 'sprinter') {
+    // a swept-back pointed hood and a bright stripe over the shoulders
+    ctx.fillStyle = '#1a0d0b'; ctx.beginPath(); ctx.moveTo(R * .62, 0); ctx.lineTo(-R * .7, -R * .42); ctx.lineTo(-R * .45, 0); ctx.lineTo(-R * .7, R * .42); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#f0b648'; ctx.lineWidth = .05; ctx.beginPath(); ctx.moveTo(-R * .15, -R * .95); ctx.lineTo(-R * .15, R * .95); ctx.stroke();
+  } else if (t === 'charger') {
+    // heavy shoulder pads and curved horns pointing forward
+    ctx.fillStyle = '#4a1c16';
+    for (const sd of [-1, 1]) { ctx.beginPath(); ctx.ellipse(-R * .05, sd * R * .72, R * .38, R * .3, 0, 0, 7); ctx.fill(); }
+    ctx.strokeStyle = '#d8cbb0'; ctx.lineWidth = .075; ctx.lineCap = 'round';
+    for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(R * .15, sd * R * .4); ctx.quadraticCurveTo(R * .45, sd * R * .95, R * 1.0, sd * R * .62); ctx.stroke(); }
+  } else if (t === 'lurker') {
+    // a ragged hooded cloak with two pale eyes
+    ctx.fillStyle = 'rgba(22,14,20,.9)'; ctx.beginPath();
+    ctx.moveTo(R * .5, -R * .7); ctx.quadraticCurveTo(R * .2, -R * 1.25, -R * .4, -R * 1.1);
+    for (let k = 0; k <= 6; k++) { const yy = -R * 1.1 + k * R * 2.2 / 6; ctx.lineTo(-R * (k % 2 ? 1.0 : 1.45) - sw * R * .1, yy); }
+    ctx.quadraticCurveTo(R * .2, R * 1.25, R * .5, R * .7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#120c0e'; ctx.beginPath(); ctx.arc(R * .1, 0, R * .55, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d9e6e0'; for (const sd of [-1, 1]) { ctx.beginPath(); ctx.arc(R * .45, sd * R * .17, R * .07, 0, 7); ctx.fill(); }
+  } else if (t === 'trapper') {
+    // a spare trap slung on its back, on a chain, and a pale mask
+    ctx.strokeStyle = '#8f9599'; ctx.lineWidth = .045; ctx.beginPath(); ctx.moveTo(-R * .2, -R * .8); ctx.lineTo(-R * .85, 0); ctx.lineTo(-R * .2, R * .8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-R * .95, 0, R * .36, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#9aa1a5';
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4, cx = -R * .95 + Math.cos(a) * R * .36, cy = Math.sin(a) * R * .36; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(-R * .95 + Math.cos(a) * R * .2, Math.sin(a) * R * .2); ctx.lineTo(-R * .95 + Math.cos(a + .25) * R * .36, Math.sin(a + .25) * R * .36); ctx.fill(); }
+    ctx.fillStyle = '#cfc6b4'; ctx.beginPath(); ctx.ellipse(R * .38, 0, R * .18, R * .36, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1a1010'; for (const sd of [-1, 1]) { ctx.beginPath(); ctx.arc(R * .45, sd * R * .14, R * .06, 0, 7); ctx.fill(); }
+  } else if (t === 'tracker') {
+    // a long hound's snout that sniffs from side to side, and amber eyes
+    const sniff = c.saw ? 0 : Math.sin(now * 9) * .15;
+    ctx.save(); ctx.rotate(sniff);
+    ctx.fillStyle = '#6b4632'; ctx.beginPath(); ctx.ellipse(R * .62, 0, R * .42, R * .24, 0, 0, 7); ctx.fill(); ctx.strokeStyle = '#0e1213'; ctx.lineWidth = .04; ctx.stroke();
+    ctx.fillStyle = '#0b0b0b'; ctx.beginPath(); ctx.arc(R * 1.0, 0, R * .1, 0, 7); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#f0b648'; for (const sd of [-1, 1]) { ctx.beginPath(); ctx.arc(R * .32, sd * R * .22, R * .08, 0, 7); ctx.fill(); }
+    ctx.strokeStyle = '#6b4632'; ctx.lineWidth = .07; ctx.lineCap = 'round';   // floppy ears
+    for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, sd * R * .4); ctx.lineTo(-R * .35, sd * R * .62); ctx.stroke(); }
+  } else if (t === 'blinker') {
+    // a glowing crystal for a head
+    ctx.shadowColor = '#9b7bff'; ctx.shadowBlur = 12;
+    ctx.fillStyle = c.state === 'blinkup' ? '#e6dcff' : '#b9a3ff';
+    ctx.beginPath(); ctx.moveTo(R * .72, 0); ctx.lineTo(R * .1, -R * .42); ctx.lineTo(-R * .45, 0); ctx.lineTo(R * .1, R * .42); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; ctx.strokeStyle = '#5a46a8'; ctx.lineWidth = .03; ctx.beginPath(); ctx.moveTo(R * .72, 0); ctx.lineTo(-R * .45, 0); ctx.stroke();
+  } else if (t === 'howler') {
+    // a shaggy mane, pointed ears and, while howling, an open muzzle
+    ctx.fillStyle = '#5d5550'; ctx.beginPath();
+    for (let k = 0; k < 14; k++) { const a = Math.PI * .45 + k * Math.PI * 1.1 / 13, rr = k % 2 ? R * .8 : R * 1.08; ctx.lineTo(Math.cos(a) * rr * .75 - R * .1, Math.sin(a) * rr); }
+    for (let k = 13; k >= 0; k--) { const a = -Math.PI * .45 - k * Math.PI * 1.1 / 13, rr = k % 2 ? R * .8 : R * 1.08; ctx.lineTo(Math.cos(a) * rr * .75 - R * .1, Math.sin(a) * rr); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3b3532'; ctx.beginPath(); ctx.arc(R * .1, 0, R * .52, 0, 7); ctx.fill();
+    for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(R * .05, sd * R * .3); ctx.lineTo(-R * .45, sd * R * .62); ctx.lineTo(-R * .2, sd * R * .15); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = '#4a423e'; ctx.beginPath(); ctx.ellipse(R * .58, 0, R * .3, R * .2, 0, 0, 7); ctx.fill();
+    if (c.state === 'howl') { ctx.fillStyle = '#7a1a14'; ctx.beginPath(); ctx.ellipse(R * .78, 0, R * .14, R * .12, 0, 0, 7); ctx.fill(); }
+    ctx.fillStyle = '#e2503f'; for (const sd of [-1, 1]) { ctx.beginPath(); ctx.arc(R * .3, sd * R * .2, R * .06, 0, 7); ctx.fill(); }
+  } else if (t === 'brute') {
+    // armour plates and a big two-handed hammer
+    ctx.fillStyle = '#5b6266'; ctx.strokeStyle = '#2b3033'; ctx.lineWidth = .035;
+    for (const sd of [-1, 1]) { ctx.beginPath(); ctx.rect(-R * .3, sd > 0 ? R * .35 : -R * .85, R * .55, R * .5); ctx.fill(); ctx.stroke(); }
+    const hx = swing ? R * 1.0 : -sw * R * .6 + R * .15, hy = swing ? R * .5 : R * 1.0;
+    const ex = hx + (swing ? R * 1.6 : R * 1.2), ey = hy + (swing ? -R * .4 : -R * .2);
+    ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = .09; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(Math.atan2(ey - hy, ex - hx));
+    ctx.fillStyle = '#8a9196'; ctx.strokeStyle = '#2b3033'; ctx.lineWidth = .04; ctx.beginPath(); ctx.rect(-R * .2, -R * .42, R * .4, R * .84); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 // sounds

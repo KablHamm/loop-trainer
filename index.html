@@ -176,7 +176,7 @@
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.0</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.1</small></h1>
     <div class="sub">Top-down chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
@@ -213,6 +213,8 @@
       <option value="rain">Rain: tracks wash away, quieter</option>
       <option value="fog">Fog: short sight both ways</option>
       <option value="night">Night: you only see nearby</option>
+      <option value="snow">Snow: tracks last longer, muffled</option>
+      <option value="dynamic">Changing: shifts during the run</option>
     </select></label>
 
     <h2>Display &amp; comfort</h2>
@@ -1788,7 +1790,7 @@ function updateChaser(dt) {
 
 /* ---------- Loop ---------- */
 function update(dt) {
-  now += dt; stats.time = now;
+  now += dt; stats.time = now; wxTick();
   if (runner.taken) {                    // time ran out: everything stops while the claw takes you
     runner.taken.t += dt; spacePressed = false;
     if (runner.taken.t >= 2.7) endRun('claw');
@@ -2774,7 +2776,7 @@ function showMenu() {
 }
 function startRun() {
   leaveWorkspace(); settleFloors(); mode = 'play'; replay = null; $('replayBar').classList.add('hide');
-  WX = WX_SET[$('optWeather').value] || WX_SET.clear; loadMap(); setBars(false); buildDrills();
+  wxPlan = makeWxPlan($('optWeather').value); wxSaid = 0; wxAt(0); loadMap(); setBars(false); buildDrills();
   $('overlay').classList.add('hide');
   say($('optNoChaser').checked ? 'Exploring: the chaser is switched off' : 'The chaser is hunting for you');
   recStart(); trainerStart();
@@ -3985,13 +3987,49 @@ function buzz(ms, strong) {
 }
 
 // Weather, chosen at the start of each run. view: how far you can see in fog or at night (0 = no limit).
+// rain / fog / dark / snow say how strongly each shows on screen (0-1), so changing weather can blend between them.
 const WX_SET = {
-  clear: { name: 'clear', mark: 1, hear: 1, sight: 26, markSee: 10, view: 0 },
-  rain:  { name: 'rain', mark: 0.5, hear: 0.6, sight: 22, markSee: 8, view: 0 },
-  fog:   { name: 'fog', mark: 1, hear: 1, sight: 11, markSee: 6, view: 7.5 },
-  night: { name: 'night', mark: 1, hear: 1, sight: 15, markSee: 6, view: 6 },
+  clear: { name: 'clear', mark: 1, hear: 1, sight: 26, markSee: 10, view: 0, rain: 0, fog: 0, dark: 0, snow: 0 },
+  rain:  { name: 'rain', mark: 0.5, hear: 0.6, sight: 22, markSee: 8, view: 0, rain: 1, fog: 0, dark: 0, snow: 0 },
+  fog:   { name: 'fog', mark: 1, hear: 1, sight: 11, markSee: 6, view: 7.5, rain: 0, fog: 1, dark: 0, snow: 0 },
+  night: { name: 'night', mark: 1, hear: 1, sight: 15, markSee: 6, view: 6, rain: 0, fog: 0, dark: 1, snow: 0 },
+  snow:  { name: 'snow', mark: 1.8, hear: 0.75, sight: 20, markSee: 13, view: 0, rain: 0, fog: 0, dark: 0, snow: 1 },
 };
 let WX = WX_SET.clear;
+// The weather plan for a run: a list of { t, name }. Fixed weather has one entry; changing weather gets a new
+// kind every 30-55 s, blending over WX_BLEND seconds. It is kept in the recording so replays match.
+const WX_BLEND = 8, WX_FAR = 30;
+const WX_SAY = { clear: 'The weather clears', rain: 'Rain sets in', fog: 'Fog rolls in', snow: 'It starts to snow' };
+let wxPlan = [{ t: 0, name: 'clear' }], wxSaid = 0;
+function makeWxPlan(choice) {
+  if (choice !== 'dynamic') return [{ t: 0, name: WX_SET[choice] ? choice : 'clear' }];
+  const kinds = ['clear', 'rain', 'fog', 'snow'], plan = [];
+  let name = kinds[Math.floor(Math.random() * kinds.length)], t = 0;
+  while (t < 1200) {
+    plan.push({ t, name });
+    const others = kinds.filter(k => k !== name); name = others[Math.floor(Math.random() * others.length)];
+    t += 30 + Math.random() * 25;
+  }
+  return plan;
+}
+function wxAt(t) {
+  if (wxPlan.length === 1) { WX = WX_SET[wxPlan[0].name]; return 0; }
+  let i = 0; while (i < wxPlan.length - 1 && wxPlan[i + 1].t <= t) i++;
+  const b = WX_SET[wxPlan[i].name], k = i ? Math.min(1, (t - wxPlan[i].t) / WX_BLEND) : 1;
+  if (k >= 1) { WX = b; return i; }
+  const a = WX_SET[wxPlan[i - 1].name], w = {};
+  for (const key in b) {
+    if (key === 'name') continue;
+    if (key === 'view') { const va = a.view || WX_FAR, vb = b.view || WX_FAR, v = va + (vb - va) * k; w.view = v >= WX_FAR - 0.5 ? 0 : v; }
+    else w[key] = a[key] + (b[key] - a[key]) * k;
+  }
+  w.name = k < 0.5 ? a.name : b.name; WX = w; return i;
+}
+// Called each frame of a run: updates the weather and says when it starts to change.
+function wxTick() {
+  const i = wxAt(now);
+  if (mode === 'play' && i > wxSaid) { wxSaid = i; say(WX_SAY[wxPlan[i].name] || ''); }
+}
 const markLifeNow = () => CFG.markLife * WX.mark;
 const bloodLifeNow = () => CFG.bloodLife * WX.mark;
 
@@ -4032,7 +4070,7 @@ function withSeed(seed, fn) {
 let rec = null, lastRec = null, replay = null, lastCard = '';
 function recStart() {
   const sp = allSpecials();
-  rec = { map: mapIdx, id: MAPS[mapIdx].id, frames: [], marks: [], blood: [], ev: [], objs: sp.slice(), last: sp.map(s => s.state), next: 0, endStart: -1, wx: WX.name };
+  rec = { map: mapIdx, id: MAPS[mapIdx].id, frames: [], marks: [], blood: [], ev: [], objs: sp.slice(), last: sp.map(s => s.state), next: 0, endStart: -1, wx: WX.name, wxPlan: wxPlan.slice() };
 }
 function recTick(force) {
   if (!rec || (!force && now < rec.next)) return;
@@ -4051,7 +4089,7 @@ function recEnd() {
 function startReplay() {
   const R = lastRec;
   if (!R || R.map >= MAPS.length || MAPS[R.map].id !== R.id) { say('No replay for this drill'); return; }
-  mapIdx = R.map; leaveWorkspace(); settleFloors(); mode = 'replay'; WX = WX_SET[R.wx] || WX_SET.clear;
+  mapIdx = R.map; leaveWorkspace(); settleFloors(); mode = 'replay'; wxPlan = R.wxPlan || [{ t: 0, name: WX_SET[R.wx] ? R.wx : 'clear' }]; wxAt(0);
   loadMap(); setBars(false);
   replay = { t: 0, speed: 1, playing: true, len: R.frames[R.frames.length - 1][0], fi: 0, ei: 0, objs: allSpecials().slice(), applied: 0 };
   $('overlay').classList.add('hide'); $('replayBar').classList.remove('hide');
@@ -4087,7 +4125,7 @@ function replayPose() {
   c.x = L(a[6], b[6]); c.y = L(a[7], b[7]); c.face = LA(a[8], b[8]); c.floor = a[9]; c.state = a[10]; c.sees = true;
   r.hp = a[11]; r.carried = a[12] === 1 ? { s: 0 } : null; r.hooked = a[12] === 2 ? { t: 1 } : null;
   r.vx = (r.x - px) * 60; r.vy = (r.y - py) * 60; r.running = true;
-  now = t; endStart = R.endStart >= 0 && t >= R.endStart ? R.endStart : -1;
+  now = t; endStart = R.endStart >= 0 && t >= R.endStart ? R.endStart : -1; wxAt(t);
   const ml = markLifeNow(), bl = bloodLifeNow();
   marks = R.marks.filter(m => m.t <= t && t - m.t < ml);
   blood = R.blood.filter(m => m.t <= t && t - m.t < bl);
@@ -4475,30 +4513,45 @@ function drawBlood(vf) {
 }
 
 /* ----- Weather on screen: rain streaks, or fog / darkness everywhere but close to you ----- */
-let wxCv = null, rainDrops = null;
+let wxCv = null, rainDrops = null, snowFlakes = null;
 function drawWeather() {
-  if (!(mode === 'play' || mode === 'over' || mode === 'replay') || WX.name === 'clear') return;
-  const dpr = window.devicePixelRatio || 1, r = runner;
-  if (WX.name === 'rain') {
-    ctx.fillStyle = 'rgba(20,32,44,.22)'; ctx.fillRect(0, 0, vw, vh);
-    if (!rainDrops) rainDrops = Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]);
-    const t = performance.now() / 1000;
-    ctx.strokeStyle = 'rgba(170,200,220,.35)'; ctx.lineWidth = 1; ctx.beginPath();
-    for (const [u, v, sp] of rainDrops) { const y = ((v + t * sp) % 1) * (vh + 40) - 20, x = ((u + t * sp * 0.15) % 1) * vw; ctx.moveTo(x, y); ctx.lineTo(x - 3, y + 14); }
-    ctx.stroke(); return;
+  if (!(mode === 'play' || mode === 'over' || mode === 'replay')) return;
+  const dpr = window.devicePixelRatio || 1, r = runner, t = performance.now() / 1000;
+  if (WX.snow > 0.01) {        // a pale cover on the ground, then flakes drifting down and swaying
+    ctx.fillStyle = 'rgba(225,234,242,' + (0.2 * WX.snow).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh);
+    if (!snowFlakes) snowFlakes = Array.from({ length: 220 }, () => [Math.random(), Math.random(), 0.05 + Math.random() * 0.09, 1 + Math.random() * 2.2, Math.random() * 7]);
+    const n = Math.round(snowFlakes.length * WX.snow);
+    ctx.fillStyle = 'rgba(245,249,255,.8)'; ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const [u, v, sp, sz, ph] = snowFlakes[i];
+      const y = ((v + t * sp) % 1) * (vh + 20) - 10, x = (((u + Math.sin(t * 0.7 + ph) * 0.012 + t * 0.008) % 1) + 1) % 1 * vw;
+      ctx.moveTo(x + sz, y); ctx.arc(x, y, sz, 0, 7);
+    }
+    ctx.fill();
   }
+  if (WX.rain > 0.01) {
+    ctx.fillStyle = 'rgba(20,32,44,' + (0.22 * WX.rain).toFixed(3) + ')'; ctx.fillRect(0, 0, vw, vh);
+    if (!rainDrops) rainDrops = Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]);
+    const n = Math.round(rainDrops.length * WX.rain);
+    ctx.strokeStyle = 'rgba(170,200,220,.35)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = 0; i < n; i++) { const [u, v, sp] = rainDrops[i], y = ((v + t * sp) % 1) * (vh + 40) - 20, x = ((u + t * sp * 0.15) % 1) * vw; ctx.moveTo(x, y); ctx.lineTo(x - 3, y + 14); }
+    ctx.stroke();
+  }
+  if (!(WX.fog > 0.01 || WX.dark > 0.01)) return;
+  const view = WX.view || WX_FAR;
   if (!wxCv) wxCv = document.createElement('canvas');
   if (wxCv.width !== cv.width || wxCv.height !== cv.height) { wxCv.width = cv.width; wxCv.height = cv.height; }
   const g = wxCv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, vw, vh);
-  g.fillStyle = WX.name === 'fog' ? 'rgba(128,138,142,.9)' : 'rgba(3,5,8,.93)'; g.fillRect(0, 0, vw, vh);
+  if (WX.fog > 0.01) { g.fillStyle = 'rgba(128,138,142,' + (0.9 * WX.fog).toFixed(3) + ')'; g.fillRect(0, 0, vw, vh); }
+  if (WX.dark > 0.01) { g.fillStyle = 'rgba(3,5,8,' + (0.93 * WX.dark).toFixed(3) + ')'; g.fillRect(0, 0, vw, vh); }
   g.globalCompositeOperation = 'destination-out';
   const hole = (x, y, rad, inner) => {
     const gr = g.createRadialGradient(x, y, rad * inner, x, y, rad); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
   };
-  hole(ox + r.x * S, oy + r.y * S, WX.view * S, WX.name === 'fog' ? 0.25 : 0.55);
-  if (WX.name === 'night') {
+  hole(ox + r.x * S, oy + r.y * S, view * S, WX.dark > 0.5 ? 0.55 : 0.25);
+  if (WX.dark > 0.01) {
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (PROP[y * W + x] === 'B') hole(ox + (x + .5) * S, oy + (y + .5) * S, 3.2 * S, 0.3);
     for (const s of allSpecials()) if (s.type === 'gate' && s.state === 'open') hole(ox + (s.x + .5) * S, oy + (s.y + .5) * S, 2.2 * S, 0.2);
   }
@@ -4801,6 +4854,15 @@ function sndInit() {
   const rnF = c.createBiquadFilter(); rnF.type = 'bandpass'; rnF.frequency.value = 2600; rnF.Q.value = 0.4;
   const rn2 = c.createBufferSource(); rn2.buffer = soft; rn2.loop = true; const rn2G = c.createGain(); rn2G.gain.value = 0.6;
   rn.connect(rnF); rnF.connect(snd.rain); rn2.connect(rn2G); rn2G.connect(snd.rain); rn.start(); rn2.start();
+  // snow: a low wind that slowly rises and falls in gusts
+  snd.wind = c.createGain(); snd.wind.gain.value = 0;
+  const wn = c.createBufferSource(); wn.buffer = soft; wn.loop = true;
+  const wnF = c.createBiquadFilter(); wnF.type = 'bandpass'; wnF.frequency.value = 420; wnF.Q.value = 1.6;
+  const wnG = c.createGain(); wnG.gain.value = 0.6;
+  const wGust = c.createOscillator(); wGust.frequency.value = 0.13; const wGustD = c.createGain(); wGustD.gain.value = 0.4;
+  const wGustF = c.createGain(); wGustF.gain.value = 160;
+  wGust.connect(wGustD); wGustD.connect(wnG.gain); wGust.connect(wGustF); wGustF.connect(wnF.frequency);
+  wn.connect(wnF); wnF.connect(wnG); wnG.connect(snd.wind); snd.wind.connect(snd.master); wn.start(); wGust.start();
   // pained noises go through a soft resonant filter so they sound more like a voice than a buzzer
   snd.groanF = c.createBiquadFilter(); snd.groanF.type = 'lowpass'; snd.groanF.frequency.value = 900; snd.groanF.Q.value = 3; snd.groanF.connect(snd.master);
 }
@@ -4895,13 +4957,14 @@ function sndTick() {
   // the instant the claw closes on you, one clash and every running sound is cut dead
   if (playing && runner.taken && runner.taken.t >= 0.95) {
     if (!runner.taken.clashed) { runner.taken.clashed = true; sndClash(); }
-    for (const k of ['amb', 'chase', 'end', 'eng', 'siren', 'grind', 'rain']) { snd[k].gain.cancelScheduledValues(t); snd[k].gain.setTargetAtTime(0, t, 0.012); }
+    for (const k of ['amb', 'chase', 'end', 'eng', 'siren', 'grind', 'rain', 'wind']) { snd[k].gain.cancelScheduledValues(t); snd[k].gain.setTargetAtTime(0, t, 0.012); }
     snd.wasChase = false; return;
   }
   // once a gate is open the ambience stops and the collapse sound takes over, building until the timer runs out
   const ek = playing && endStart >= 0 ? Math.max(0, Math.min(1, (now - endStart) / CFG.endTime)) : -1;
   snd.amb.gain.setTargetAtTime(playing && ek < 0 ? (chasing ? 0.16 : 0.4) : 0, t, 0.6);             // kept low, and lower still under the music
-  snd.rain.gain.setTargetAtTime(playing && WX.name === 'rain' ? 0.16 : 0, t, 0.8);
+  snd.rain.gain.setTargetAtTime(playing ? 0.16 * WX.rain : 0, t, 0.8);
+  snd.wind.gain.setTargetAtTime(playing ? 0.22 * WX.snow : 0, t, 0.8);
   snd.end.gain.setTargetAtTime(ek < 0 ? 0 : 0.1 + 0.4 * ek, t, 0.4);
   if (ek >= 0) {
     snd.endLfo.frequency.setTargetAtTime(1.2 + 5 * ek * ek, t, 0.5);

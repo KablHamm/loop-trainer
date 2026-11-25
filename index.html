@@ -194,7 +194,7 @@
 <button id="menuBtn">☰ Menu</button>
 <div id="app">
   <aside>
-    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.8</small></h1>
+    <h1 style="display:flex;align-items:baseline;gap:5px">Loop <span>Trainer</span><small id="ver" style="margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;opacity:.6">v1.9</small></h1>
     <div class="sub">Chase practice. Survive as long as you can.</div>
 
     <h2>Drill</h2>
@@ -3432,7 +3432,7 @@ function isoCamera(fitOnly) {
   if (!fitOnly && a < isoMinA()) a = isoMinA();
   const minX = (x0 - y1) * a, maxX = (x1 - y0) * a, minY = (x0 + y0) * a / 2 - top * a, maxY = (x1 + y1) * a / 2;
   const fit = (lo, hi, view, want) => hi - lo <= view ? (view - (hi - lo)) / 2 - lo : Math.max(view - hi, Math.min(-lo, want));
-  const r = runner, px = (r.x - r.y) * a, py = (r.x + r.y) * a / 2 - a * .8;
+  const r = runner, px = (r.x - r.y) * a, py = (r.x + r.y) * a / 2 - a * .8 - (r.floor === 1 && FL.length > 1 ? FLOOR_LIFT * a * ISO_Z : 0);
   return { a, ox: fit(minX, maxX, vw, vw / 2 - px), oy: fit(minY, maxY, vh, vh / 2 - py) };
 }
 const isoApply = g => g.transform(ISO.a, ISO.a / 2, -ISO.a, ISO.a / 2, ISO.ox, ISO.oy);   // on top of the plain pixel transform
@@ -3495,7 +3495,7 @@ const BUILD = {
 // x, y: where they stand. o: { face, body, head, phase, run, kind, scale, swing, state, mom, alpha, c }
 function drawUpright(x, y, o) {
   const t = o.kind, B = BUILD[t] || BUILD.standard, isRunner = t === 'runner';
-  const [sx, sy] = W2S(x, y), d = dprNow(), u = ISO.a * 0.98 * (t === 'brute' ? 1.08 : 1);
+  const [sx, sy0] = W2S(x, y), sy = sy0 - (o.lift || 0) * ISO.a * ISO_Z, d = dprNow(), u = ISO.a * 0.98 * (t === 'brute' ? 1.08 : 1);
   const phi = o.face + Math.PI / 4, cf = Math.cos(phi), sf = Math.sin(phi);
   const Fx = cf, Fy = sf * .5, Lx = -sf, Ly = cf * .5;            // forward and sideways (to its right) on the screen
   const P = (f, l, h) => [(f * Fx + l * Lx) * u, (f * Fy + l * Ly) * u - h * u];
@@ -3716,30 +3716,278 @@ function drawUpright(x, y, o) {
   ctx.restore();
 }
 
+/* ---------- v1.9: the isometric view, stage 2: everything on the map is raised ---------- */
+const FLOOR_LIFT = 1.0, HILL_H = 0.45;
+const P3 = (x, y, z) => { const p = W2S(x, y); return [p[0], p[1] - z * ISO.a * ISO_Z]; };
+function litCol(col, n) {   // a face's colour from the way it points: tops lightest, faces toward +x darkest
+  const l = Math.hypot(n[0], n[1], n[2]) || 1, k = (.9 * n[2] + .1 * n[1] - .35 * n[0]) / l;
+  return shade(col, k > 0 ? k * .18 : k * .55);
+}
+// A solid with 8 corners: c[i + 2j + 4k], i and j across the footprint, k bottom (0) or top (1). Only faces toward
+// the camera are drawn, so any box-like shape (tilted, wedged, slanted) comes out right.
+const SOLID_FACES = [[0, 2, 6, 4], [1, 3, 7, 5], [0, 1, 5, 4], [2, 3, 7, 6], [0, 1, 3, 2], [4, 5, 7, 6]];
+function isoSolid(c, col, topCol, edge) {
+  let cx = 0, cy = 0, cz = 0; for (const q of c) { cx += q[0] / 8; cy += q[1] / 8; cz += q[2] / 8; }
+  const vz = 1 / ISO_Z;
+  for (const f of SOLID_FACES) {
+    let fx = 0, fy = 0, fz = 0; for (const i of f) { fx += c[i][0] / 4; fy += c[i][1] / 4; fz += c[i][2] / 4; }
+    const n = [fx - cx, fy - cy, fz - cz];
+    if (n[0] + n[1] + n[2] * vz <= 1e-6) continue;
+    const top = n[2] > Math.abs(n[0]) + Math.abs(n[1]);
+    ctx.fillStyle = litCol(top && topCol ? topCol : col, n); ctx.beginPath();
+    f.forEach((i, j) => { const p = P3(c[i][0], c[i][1], c[i][2]); if (j) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = edge || 'rgba(10,12,13,.45)'; ctx.lineWidth = .8; ctx.stroke();
+  }
+}
+// A box turned to point along u (ux, uy), centred on cx, cy: a0..a1 along it, b0..b1 across it, z0..z1 high.
+// zt, if given, sets the top height at each end along it (a0 end, a1 end), for slopes.
+function isoOBox(cx, cy, ux, uy, a0, a1, b0, b1, z0, z1, col, topCol, zt) {
+  const vx = -uy, vy = ux, c = [];
+  for (let k = 0; k < 2; k++) for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
+    const a = i ? a1 : a0, b = j ? b1 : b0;
+    c[i + 2 * j + 4 * k] = [cx + ux * a + vx * b, cy + uy * a + vy * b, k ? (zt ? zt[i] : z1) : z0];
+  }
+  isoSolid(c, col, topCol);
+}
+// An axis-aligned tile slope: the corner heights at (x, y), (x+1, y), (x, y+1), (x+1, y+1).
+function isoTileSlope(x, y, z00, z10, z01, z11, base, col, topCol) {
+  const c = [[x, y, base], [x + 1, y, base], [x, y + 1, base], [x + 1, y + 1, base], [x, y, z00], [x + 1, y, z10], [x, y + 1, z01], [x + 1, y + 1, z11]];
+  isoSolid(c, col, topCol);
+}
+function isoCyl(cx, cy, r, z0, z1, col, topCol) {   // an upright drum or post
+  const a = ISO.a, rx = r * a * Math.SQRT2, ry = rx / 2, [bx, by] = P3(cx, cy, z0), [tx, ty] = P3(cx, cy, z1);
+  const g = ctx.createLinearGradient(bx - rx, 0, bx + rx, 0); g.addColorStop(0, shade(col, .15)); g.addColorStop(.45, col); g.addColorStop(1, shade(col, -.5));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(tx - rx, ty); ctx.lineTo(bx - rx, by); ctx.ellipse(bx, by, rx, ry, 0, Math.PI, 0, true); ctx.lineTo(tx + rx, ty); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(10,12,13,.5)'; ctx.lineWidth = .8; ctx.stroke();
+  ctx.fillStyle = topCol || shade(col, .15); ctx.beginPath(); ctx.ellipse(tx, ty, rx, ry, 0, 0, 7); ctx.fill(); ctx.stroke();
+}
+
+/* ----- Pallets: standing at the side of the gap, or dropped and leaning from the floor up against the far wall ----- */
+function palletFrame(s) {
+  // It stands at the end of the gap nearer the camera and falls away from it, so the leaning board faces you.
+  if (s.diag) { const th = s.diag === 1 ? -Math.PI / 4 : Math.PI / 4, k = Math.cos(th) + Math.sin(th) > 0 ? -1 : 1; return { ux: Math.cos(th) * k, uy: Math.sin(th) * k, s0: -.66, e: .64, half: .36 }; }
+  return s.axis === 'y' ? { ux: -1, uy: 0, s0: -.5, e: .5, half: .44 } : { ux: 0, uy: -1, s0: -.5, e: .5, half: .44 };
+}
+function isoPallet(s) {
+  const F = palletFrame(s), cx = s.x + .5, cy = s.y + .5, wood = '#c99a3e';
+  if (s.state === 'up') { isoOBox(cx, cy, F.ux, F.uy, F.s0, F.s0 + .14, -F.half, F.half, 0, .98, wood, '#dcae52'); return; }
+  if (s.state !== 'down') return;
+  // it pivoted on its bottom edge and fell across the gap; its top came to rest against the far side
+  const a = F.s0 + .14, L = 1.12, dx = F.e - a, zt = Math.max(.3, dx < L ? Math.sqrt(L * L - dx * dx) : 0), th = .09;
+  isoOBox(cx, cy, F.ux, F.uy, a, F.e, -F.half, F.half, 0, th, wood, '#dcae52', [th, zt + th]);
+  // the gaps between the boards, across the top
+  ctx.strokeStyle = 'rgba(70,46,14,.75)'; ctx.lineWidth = Math.max(1, ISO.a * .05);
+  const vx = -F.uy, vy = F.ux;
+  for (const f of [.2, .4, .6, .8]) {
+    const al = a + (F.e - a) * f, z = th + zt * f + .005;
+    const p = P3(cx + F.ux * al + vx * F.half * .96, cy + F.uy * al + vy * F.half * .96, z), q = P3(cx + F.ux * al - vx * F.half * .96, cy + F.uy * al - vy * F.half * .96, z);
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+  }
+  // a dark gap under the raised end, so you can see it is leaning, not lying flat
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; const e1 = P3(cx + F.ux * F.e + vx * F.half, cy + F.uy * F.e + vy * F.half, 0), e2 = P3(cx + F.ux * F.e - vx * F.half, cy + F.uy * F.e - vy * F.half, 0), e3 = P3(cx + F.ux * a, cy + F.uy * a, 0);
+  ctx.beginPath(); ctx.moveTo(e1[0], e1[1]); ctx.lineTo(e2[0], e2[1]); ctx.lineTo(e3[0], e3[1]); ctx.closePath(); ctx.fill();
+}
+
+/* ----- Cars and large crates ----- */
+function isoObj(o) {
+  const T = OBJ_TYPES[o.t], hl = T.hl, hw = T.hw, h = Math.abs(Math.round(o.x * 7 + o.y * 13)) % 4;
+  if (o.t === 'car') {
+    const body = ['#5b6b78', '#7a4a3a', '#4d5d49', '#6e6a58'][h], dark = ['#3f4b55', '#573428', '#374334', '#4e4b3e'][h];
+    const wheels = [];
+    for (const wa of [-.64, .6]) for (const wb of [-1, 1]) wheels.push([wa * hl, wb * (hw - .08)]);
+    const depth = ([wa, wb]) => (o.x + o.c * wa - o.s * wb) + (o.y + o.s * wa + o.c * wb);
+    wheels.sort((A, B) => depth(A) - depth(B));
+    const behind = wheels.filter(w => depth(w) < o.x + o.y), front = wheels.filter(w => depth(w) >= o.x + o.y);
+    const wheel = ([wa, wb]) => isoOBox(o.x + o.c * wa - o.s * wb, o.y + o.s * wa + o.c * wb, o.c, o.s, -.22, .22, -.1, .1, 0, .42, '#111516');
+    behind.forEach(wheel);
+    isoOBox(o.x, o.y, o.c, o.s, -hl, hl, -hw, hw, .16, .62, body);
+    isoLifted(.62, () => drawObj(o));
+    isoOBox(o.x, o.y, o.c, o.s, -hl * .5, hl * .44, -hw * .84, hw * .84, .62, 1.02, '#2a3a44', dark);   // the cabin: windows round the sides, the roof on top
+    front.forEach(wheel);
+  } else {
+    isoOBox(o.x, o.y, o.c, o.s, -hl, hl, -hw, hw, 0, 1.05, '#6a4c2c', '#7a5a34');
+    isoLifted(1.05, () => drawObj(o));
+  }
+}
+
+/* ----- Props, hills, stairs, railings, bushes and corn: worked out once per floor, then drawn in depth order ----- */
+const isoStaticCache = new WeakMap();
+function isoStatic() {
+  const prev = isoStaticCache.get(PROP);
+  if (prev && prev.G === G && prev.H === HILL && prev.S === STAIR && prev.R === RAIL && prev.GR === GROUND) return prev.items;
+  const items = [], fl = curFloor;
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x, ch = PROP[i], v = ((x * 7 + y * 13) % 5) / 5, k = x + y;
+    if (HILL[i]) items.push({ k, fn: () => isoHill(x, y) });
+    else if (ch === 'K') items.push({ k, fn: () => isoRock(x, y, v) });
+    else if (ch === 'X') items.push({ k, fn: () => { isoBox(x + .08, y + .08, x + .92, y + .92, .8, null, '#6a4c2c', '#56391f', 0, '#3a2814'); isoLifted(.8, () => drawProp('X', x, y)); } });
+    else if (ch === 'B') items.push({ k, fn: () => isoBarrel(x, y, v) });
+    else if (ch === '6') items.push({ k, fn: () => isoHook(x, y) });
+    else if (ch === 'G') items.push({ k, bush: true, fn: () => isoBush(x, y, v) });
+    else if (ch === 'D') items.push({ k, fn: () => { isoDeckBox(x, y); } });
+    else if (ch === 'A') items.push({ k, fn: () => { isoBox(x + .06, y + .06, x + .94, y + .94, .5, null, '#3a2c1c', '#2c2014'); isoLifted(.5, () => drawProp('A', x, y)); } });
+    if (STAIR[i]) items.push({ k, fn: () => isoStairs(x, y, STAIR[i] - 1, fl) });
+    if (GROUND[i] === 'c' && G[i] !== 1) items.push({ k, fn: () => isoCorn(x, y) });
+    const rail = RAIL[i] | (fl === 0 && FL[1] && FL[1].RAIL[i] && (ch === 'D' || FL[1].DECK[i]) ? FL[1].RAIL[i] : 0);
+    if (rail) items.push({ k, fn: () => isoRail(x, y, rail, fl === 0 && !RAIL[i] ? FLOOR_LIFT : 0) });
+  }
+  isoStaticCache.set(PROP, { G, H: HILL, S: STAIR, R: RAIL, GR: GROUND, items });
+  return items;
+}
+function isoRock(x, y, v) {
+  const base = [[x + .12, y + .55 + v * .1], [x + .3, y + .15], [x + .7 - v * .1, y + .1], [x + .92, y + .45], [x + .78, y + .88], [x + .3, y + .9]];
+  const cx = base.reduce((s, p) => s + p[0], 0) / 6, cy = base.reduce((s, p) => s + p[1], 0) / 6, h = .72 - v * .18;
+  const top = base.map(([px, py], i) => [cx + (px - cx) * (.62 + (i % 2) * .1), cy + (py - cy) * (.62 + (i % 2) * .1)]);
+  // the sides from the back round to the front, then the top
+  const sides = base.map((p, i) => { const j = (i + 1) % 6; return { i, j, d: p[0] + p[1] + base[j][0] + base[j][1] }; }).sort((A, B) => A.d - B.d);
+  for (const { i, j } of sides) {
+    const mx = (base[i][0] + base[j][0]) / 2 - cx, my = (base[i][1] + base[j][1]) / 2 - cy;
+    if (mx + my < -0.05) continue;   // facing away
+    ctx.fillStyle = litCol('#5b6468', [mx, my, .4]); ctx.beginPath();
+    for (const [q, z] of [[base[i], 0], [base[j], 0], [top[j], h], [top[i], h]]) { const p = P3(q[0], q[1], z); ctx.lineTo(p[0], p[1]); }
+    ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(10,12,13,.4)'; ctx.lineWidth = .8; ctx.stroke();
+  }
+  ctx.fillStyle = '#7a858a'; ctx.beginPath(); top.forEach(q => { const p = P3(q[0], q[1], h); ctx.lineTo(p[0], p[1]); }); ctx.closePath(); ctx.fill(); ctx.stroke();
+}
+function isoBarrel(x, y, v) {
+  const cx = x + .5, cy = y + .5, t = performance.now() / 1000, fl = 0.8 + 0.2 * Math.sin(t * 11 + x * 2.1 + y * 1.3), a = ISO.a;
+  isoCyl(cx, cy, .38, 0, .78, v > .5 ? '#4a4f55' : '#6a4334', '#140c08');
+  const [tx, ty] = P3(cx, cy, .78);
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.ellipse(tx, ty, .29 * a * Math.SQRT2, .29 * a * Math.SQRT2 / 2, 0, 0, 7); ctx.fill();
+  // flames licking up out of the drum
+  for (const [ox, hh, col] of [[-.12, .55, '#e8641e'], [.1, .48, '#e8641e'], [0, .72, '#ff8a2a'], [-.03, .38, '#ffc24a']]) {
+    const w = a * .22, top = ty - hh * a * ISO_Z * fl - Math.sin(t * 13 + ox * 9) * a * .05, bx = tx + ox * a * 1.4;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(bx - w, ty); ctx.quadraticCurveTo(bx - w * .7, (ty + top) / 2, bx + Math.sin(t * 9 + ox) * w * .4, top); ctx.quadraticCurveTo(bx + w * .7, (ty + top) / 2, bx + w, ty); ctx.closePath(); ctx.fill();
+  }
+}
+function isoHook(x, y) {
+  const cx = x + .5, cy = y + .5, f = ((x * 7 + y * 13) % 5) / 5 > .5 ? -1 : 1, ax = cx + 1.05 * f, ay = cy - .55, a = ISO.a;
+  isoOBox(cx, cy, 1, 0, -.5, .5, -.08, .08, 0, .08, '#3d2c1c');   // the feet
+  isoOBox(cx, cy, 0, 1, -.5, .5, -.08, .08, 0, .08, '#3d2c1c');
+  isoCyl(cx, cy, .14, 0, 2.35, '#6b4a2b', '#86603a');
+  const top = P3(cx, cy, 2.25), end = P3(ax, ay, 2.25), br = P3(cx, cy, 1.75), bm = P3(cx + (ax - cx) * .55, cy + (ay - cy) * .55, 2.25);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#2a1d12'; ctx.lineWidth = a * .2; ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(end[0], end[1]); ctx.stroke();
+  ctx.strokeStyle = '#7b858a'; ctx.lineWidth = a * .12; ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(end[0], end[1]); ctx.stroke();
+  ctx.strokeStyle = '#59636a'; ctx.lineWidth = a * .07; ctx.beginPath(); ctx.moveTo(br[0], br[1]); ctx.lineTo(bm[0], bm[1]); ctx.stroke();
+  const ch = P3(ax, ay, 1.75); ctx.strokeStyle = '#9aa4a8'; ctx.lineWidth = a * .05; ctx.setLineDash([a * .08, a * .05]); ctx.beginPath(); ctx.moveTo(end[0], end[1]); ctx.lineTo(ch[0], ch[1]); ctx.stroke(); ctx.setLineDash([]);
+  const hk = P3(ax, ay, 1.45), r = a * .3;
+  ctx.strokeStyle = '#1c2225'; ctx.lineWidth = a * .16; ctx.beginPath(); ctx.arc(hk[0], hk[1], r, -Math.PI / 2, Math.PI * (f > 0 ? .8 : .2), f < 0); ctx.stroke();
+  ctx.strokeStyle = '#cfd7da'; ctx.lineWidth = a * .09; ctx.beginPath(); ctx.arc(hk[0], hk[1], r, -Math.PI / 2, Math.PI * (f > 0 ? .8 : .2), f < 0); ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+function isoBush(x, y, v) {
+  const a = ISO.a, blobs = [[.3, .35, .3], [.68, .3, .27], [.5, .68, .32], [.25, .72, .2], [.78, .7, .22], [.5, .45, .3]].sort((A, B) => (A[0] + A[1]) - (B[0] + B[1]));
+  for (const [bx, by, br] of blobs) {
+    const [px, py] = P3(x + bx, y + by + v * .05, br * 1.1), R = br * a * 1.55;
+    const g = ctx.createRadialGradient(px - R * .3, py - R * .35, R * .1, px, py, R);
+    g.addColorStop(0, '#5e9a5c'); g.addColorStop(.6, '#346e3e'); g.addColorStop(1, '#1f4527');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(px, py, R, R * .9, 0, 0, 7); ctx.fill();
+  }
+}
+function isoCorn(x, y) {
+  const a = ISO.a, h = (x * 29 + y * 53) % 7, sway = Math.sin(performance.now() / 900 + x * .7 + y * .4) * .03;
+  const stalks = [];
+  for (let i = 0; i < 4; i++) stalks.push([x + .2 + (i % 2) * .5 + ((h + i) % 3) * .04, y + .22 + (i >> 1) * .5 + ((h + i * 2) % 3) * .04]);
+  stalks.sort((A, B) => (A[0] + A[1]) - (B[0] + B[1]));
+  ctx.lineCap = 'round';
+  for (const [sx, sy] of stalks) {
+    const b = P3(sx, sy, 0), t = P3(sx + sway, sy - sway, 1.35);
+    ctx.strokeStyle = '#6f7f2e'; ctx.lineWidth = a * .07; ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(t[0], t[1]); ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,140,50,.95)'; ctx.lineWidth = a * .06;
+    for (const [z, dir] of [[.45, 1], [.75, -1], [1.05, 1]]) { const p = P3(sx, sy, z); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.quadraticCurveTo(p[0] + dir * a * .3, p[1] - a * .2, p[0] + dir * a * .42, p[1] + a * .05); ctx.stroke(); }
+    ctx.fillStyle = '#d6ba54'; ctx.beginPath(); ctx.ellipse(t[0], t[1] + a * .25, a * .06, a * .14, 0, 0, 7); ctx.fill();   // the cob
+  }
+  ctx.lineCap = 'butt';
+}
+function isoDeckBox(x, y) {   // a raised platform seen from the ground: it stands as high as the upper floor
+  const D = (dx, dy) => PROP[(y + dy) * W + x + dx] === 'D';
+  isoBox(x, y, x + 1, y + 1, FLOOR_LIFT, null, D(0, 1) ? null : '#4a3826', D(1, 0) ? null : '#3a2b1d', 0, '#241a10');
+  isoLifted(FLOOR_LIFT, () => drawDeck(x, y));
+}
+function isoHill(x, y) {
+  const i = y * W + x, id = HILL[i], wood = hills[id] && hills[id].family === 2, top = wood ? '#75593a' : '#6b757a', side = wood ? '#4a3826' : '#4a5357';
+  if (RAMP[i]) {   // a slope from the ground up to the top, low on the open side
+    const dx = RDX[i], dy = RDY[i], z = (cx, cy) => ((dx > 0 && cx) || (dx < 0 && !cx) || (dy > 0 && cy) || (dy < 0 && !cy)) ? .01 : HILL_H;
+    isoTileSlope(x, y, z(0, 0), z(1, 0), z(0, 1), z(1, 1), 0, side, top);
+    return;
+  }
+  const same = (ddx, ddy) => HILL[i + ddy * W + ddx] === id;
+  isoBox(x, y, x + 1, y + 1, HILL_H, null, same(0, 1) ? null : side, same(1, 0) ? null : shade(side, -.25), 0, wood ? '#241a10' : '#2a3033');
+  isoLifted(HILL_H, () => drawHillTile(x, y));
+}
+function isoStairs(x, y, d, fl) {   // a flight between the floors: rising toward d on the ground floor, falling away from it upstairs
+  const [dx, dy] = STAIR_DIRS[d], lo = fl === 0 ? 0 : -FLOOR_LIFT, hi = fl === 0 ? FLOOR_LIFT : 0;
+  const z = (cx, cy) => ((dx > 0 && cx) || (dx < 0 && !cx) || (dy > 0 && cy) || (dy < 0 && !cy)) ? hi : lo;
+  isoTileSlope(x, y, z(0, 0), z(1, 0), z(0, 1), z(1, 1), fl === 0 ? 0 : -FLOOR_LIFT, '#4a3826', '#7a5e3c');
+  // treads across the slope, and handrails up both sides
+  const px = -dy, py = dx, cx = x + .5, cy = y + .5, zAt = o => lo + (hi - lo) * (o + .5);
+  ctx.strokeStyle = 'rgba(42,30,18,.9)'; ctx.lineWidth = Math.max(1, ISO.a * .05);
+  for (const o of [-.3, -.1, .1, .3]) { const p = P3(cx + dx * o + px * .45, cy + dy * o + py * .45, zAt(o) + .01), q = P3(cx + dx * o - px * .45, cy + dy * o - py * .45, zAt(o) + .01); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+  ctx.strokeStyle = '#c9d2d4'; ctx.lineWidth = Math.max(1, ISO.a * .06);
+  for (const s of [-1, 1]) { const p = P3(cx + px * .47 * s - dx * .5, cy + py * .47 * s - dy * .5, lo + .55), q = P3(cx + px * .47 * s + dx * .5, cy + py * .47 * s + dy * .5, hi + .55); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+}
+function isoRail(x, y, mask, base) {   // a waist-high railing along the marked sides of a tile
+  edgeRects(x, y, mask, (ax, ay, bx, by) => {
+    const along = bx - ax > by - ay, rail = '#c9d2d4';
+    isoBox(ax, ay, bx, by, .08, rail, '#9fabb0', '#7d8a90', base + .5);
+    for (const t of [0, .5, 1]) {
+      const px = along ? ax + (bx - ax) * t : (ax + bx) / 2, py = along ? (ay + by) / 2 : ay + (by - ay) * t;
+      isoBox(px - .04, py - .04, px + .04, py + .04, .5, '#9fabb0', '#6f828b', '#56656c', base);
+    }
+  });
+}
+
+// Whether something tall stands just in front of this spot (toward the camera), so a person there could be hidden.
+function isoHiddenBehind(x, y) {
+  const fx = Math.floor(x), fy = Math.floor(y);
+  for (let dy = 0; dy <= 3; dy++) for (let dx = 0; dx <= 3; dx++) {
+    const s = dx + dy; if (!s || s > 3 || Math.abs(dx - dy) > 1) continue;
+    const tx = fx + dx, ty = fy + dy; if (tx >= W || ty >= H) continue;
+    const i = ty * W + tx; if (G[i] === 1 || TRI[i] || PROP[i] || PBLOCK[i] || spec[i]) return true;
+  }
+  return false;
+}
+// How high someone stands: on top of a hill, or part way up its slope.
+function personLift(x, y) {
+  const i = Math.floor(y) * W + Math.floor(x); if (!HILL[i]) return 0;
+  if (!RAMP[i]) return HILL_H;
+  const fx = x - Math.floor(x), fy = y - Math.floor(y), dx = RDX[i], dy = RDY[i];
+  const t = dx > 0 ? 1 - fx : dx < 0 ? fx : dy > 0 ? 1 - fy : fy;   // 0 at the low edge, 1 at the top
+  return HILL_H * Math.max(0, Math.min(1, t));
+}
+
 /* ----- Everything raised, drawn from the back of the map to the front ----- */
 function isoRaised(people) {
-  const d = dprNow(), wallTop = '#55686d', wallL = '#3b4a4e', wallR = '#2c383b';
+  const d = dprNow();
   ctx.save(); ctx.setTransform(d, 0, 0, d, 0, 0);
-  const isWall = (x, y) => x >= 0 && y >= 0 && x < W && y < H && G[y * W + x] === 1 && !VOID[y * W + x] && !PROP[y * W + x];
-  // things on each tile, by diagonal (x + y)
-  const byDiag = Array.from({ length: W + H }, () => []), wallPaths = isoWallPaths();
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x;
-    if (PROP[i] === 'T') byDiag[x + y].push(() => isoTree(x, y, people));
-  }
-  for (const s of specials) if (!s.diag) byDiag[Math.min(W + H - 1, s.x + s.y)].push(() => isoSpecial(s));
-  const ppl = people.slice().sort((A, B) => (A.x + A.y) - (B.x + B.y));
+  const n = W + H + 2, byDiag = Array.from({ length: n }, () => []), wallPaths = isoWallPaths();
+  const put = (k, fn) => byDiag[Math.max(0, Math.min(n - 1, Math.floor(k)))].push(fn);
+  for (const it of isoStatic()) put(it.k, it.fn);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (PROP[y * W + x] === 'T') put(x + y, () => isoTree(x, y, people));
+  for (const s of specials) put(s.x + s.y, () => isoSpecial(s));
+  for (const o of OBJS) put(o.x + o.y - 1, () => isoObj(o));
+  // people: lifted onto hills; anyone in a bush is drawn just before the bush, so its leaves cover them
+  const ppl = people.map(p => {
+    const lift = p.lift !== undefined ? p.lift : personLift(p.x, p.y);
+    let key = p.x + p.y;
+    if (p.inBush) key = Math.floor(p.x) + Math.floor(p.y) + .5;
+    else if (lift > 0) key = Math.max(key, Math.floor(p.x) + Math.floor(p.y) + 1.001);   // in front of the hill tile they stand on
+    return Object.assign({}, p, { lift, key });
+  }).sort((A, B) => A.key - B.key);
   let pi = 0;
-  for (let k = 0; k < byDiag.length; k++) {
-    while (pi < ppl.length && ppl[pi].x + ppl[pi].y < k + 1) { drawUpright(ppl[pi].x, ppl[pi].y, ppl[pi]); pi++; }
+  for (let k = 0; k < n; k++) {
+    while (pi < ppl.length && ppl[pi].key < k + 1) { drawUpright(ppl[pi].x, ppl[pi].y, ppl[pi]); pi++; }
     isoWallsAt(k, wallPaths);
     for (const fn of byDiag[k]) fn();
   }
   while (pi < ppl.length) { drawUpright(ppl[pi].x, ppl[pi].y, ppl[pi]); pi++; }
   // anyone hidden behind a wall still shows faintly through it
-  for (const p of ppl) if (!p.inBush) drawUpright(p.x, p.y, Object.assign({}, p, { alpha: (p.alpha === undefined ? 1 : p.alpha) * 0.28 }));
+  for (const p of ppl) if (!p.inBush && isoHiddenBehind(p.x, p.y)) drawUpright(p.x, p.y, Object.assign({}, p, { alpha: (p.alpha === undefined ? 1 : p.alpha) * 0.28 }));
   ctx.restore();
 }
+
 function isoTree(x, y, people) {
   const under = people.some(p => Math.hypot(p.x - x - .5, p.y - y - .5) < 1.45);
   const [sx, sy] = W2S(x + .5, y + .5), a = ISO.a, h = a * ISO_Z;
@@ -3766,9 +4014,8 @@ function isoSpecial(s) {
       isoBox(x + .2, y + .84, x + .8, y + 1, 1, '#55686d', '#3b4a4e', '#2c383b');
     }
     if (!jam && s.vaults) isoLifted(.35, () => { ctx.fillStyle = '#f0b648'; for (let i = 0; i < s.vaults; i++) { ctx.beginPath(); ctx.arc(x + (hz ? .3 + i * .2 : .5), y + (hz ? .5 : .3 + i * .2), .06, 0, 7); ctx.fill(); } });
-  } else if (s.type === 'pallet' && s.state === 'up') {   // standing on its end at the side of the gap
-    if (hz) isoBox(x, y + .05, x + .16, y + .95, .95, '#d9a441', '#b3812a', '#8f6620');
-    else isoBox(x + .05, y, x + .95, y + .16, .95, '#d9a441', '#b3812a', '#8f6620');
+  } else if (s.type === 'pallet') {   // standing at the side of the gap, or dropped and leaning across it
+    isoPallet(s);
   } else if (s.type === 'locker') {
     isoBox(x + .1, y + .1, x + .9, y + .9, 1.3, '#7a2520', '#9a2f28', '#6e211c', 0, '#2b3033');
     const f = s.face, hidden = runner.hidden === s, checking = chaser.state === 'check' && chaser.lockerTarget === s;
@@ -3827,10 +4074,11 @@ function drawBaseCached(drawBase, layered) {
 }
 
 // Isometric walls: their outlines are worked out once per zoom level, grouped by diagonal, and filled in a few calls.
-let isoWallCache = null;
+const isoWallCache = new WeakMap();
 function isoWallPaths() {
   const a = ISO.a;
-  if (isoWallCache && isoWallCache.a === a && isoWallCache.G === G && isoWallCache.T === TRI && isoWallCache.P === PROP && isoWallCache.V === VOID) return isoWallCache.diag;
+  const wc = isoWallCache.get(G);
+  if (wc && wc.a === a && wc.T === TRI && wc.P === PROP && wc.V === VOID) return wc.diag;
   const k = a * ISO_Z, P = (x, y, z) => [(x - y) * a, (x + y) * a / 2 - z * k];
   const isWall = (x, y) => x >= 0 && y >= 0 && x < W && y < H && G[y * W + x] === 1 && !VOID[y * W + x] && !PROP[y * W + x];
   const poly = (path, pts) => { path.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) path.lineTo(pts[i][0], pts[i][1]); path.closePath(); };
@@ -3849,7 +4097,7 @@ function isoWallPaths() {
       poly(p.T, [P(v[0], v[1], 1), P(v[2], v[3], 1), P(v[4], v[5], 1)]);
     }
   }
-  isoWallCache = { a, G, T: TRI, P: PROP, V: VOID, diag };
+  isoWallCache.set(G, { a, T: TRI, P: PROP, V: VOID, diag });
   return diag;
 }
 function isoWallsAt(d, paths) {
@@ -3941,7 +4189,7 @@ function draw() {
   // solid props (bushes are drawn later, over the people standing in them)
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     const pch = PROP[y * W + x];
-    if (pch && pch !== 'G') { if (HILL[y * W + x]) drawHillTile(x, y); else drawProp(pch, x, y); }
+    if (pch && pch !== 'G' && (!ISO || pch === 'T')) { if (HILL[y * W + x]) drawHillTile(x, y); else drawProp(pch, x, y); }
   }
   // flickering firelight around burn barrels
   const tFire = performance.now() / 1000;
@@ -3953,7 +4201,7 @@ function draw() {
     ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(x + .5, y + .5, rad, 0, 7); ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
-  for (const o of OBJS) drawObj(o);   // cars and large crates
+  if (!ISO) for (const o of OBJS) drawObj(o);   // cars and large crates
 
   // windows, pallets, gates and hatches
   for (const s of specials) drawSpecialArt(s);
@@ -3962,10 +4210,11 @@ function draw() {
   { const live = (mode === 'play' || mode === 'over') && allSpecials().some(s => s.type === 'gate' && s.state === 'open');
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (EXITL[y * W + x]) drawExitTile(x, y, !(EXITL[(y - 1) * W + x] || EXITL[(y + 1) * W + x]) || EXITL[y * W + x - 1] || EXITL[y * W + x + 1], live); }
   // staircases between the floors: steps, and an arrow for which way they take you
-  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (STAIR[y * W + x]) drawStairs(x, y, STAIR[y * W + x] - 1, curFloor === 0);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (STAIR[y * W + x] && !ISO) drawStairs(x, y, STAIR[y * W + x] - 1, curFloor === 0);
   // railings; on the ground floor, also the ones round the edge of a raised platform
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     const i = y * W + x;
+    if (ISO) continue;
     if (RAIL[i]) drawRail(x, y, RAIL[i]);
     if (curFloor === 0 && FL[1] && FL[1].RAIL[i] && (PROP[i] === 'D' || FL[1].DECK[i])) drawRail(x, y, FL[1].RAIL[i]);
   }
@@ -3974,7 +4223,11 @@ function draw() {
   // Draw the ground floor dimmed underneath when the upper floor is on screen, then the floor itself.
   if (vf === 1) {
     useFloor(0); drawBaseCached(drawBase, false); drawSolid(false);
-    ctx.fillStyle = 'rgba(8,11,12,.6)'; ctx.fillRect(0, 0, W, H);
+    if (ISO) {   // the ground floor and its walls, dimmed, then everything upstairs is drawn a floor higher
+      isoRaised([]);
+      ctx.save(); ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0); ctx.fillStyle = 'rgba(8,11,12,.6)'; ctx.fillRect(0, 0, vw, vh); ctx.restore();
+      ISO.oy -= FLOOR_LIFT * ISO.a * ISO_Z; ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0); isoApply(ctx);
+    } else { ctx.fillStyle = 'rgba(8,11,12,.6)'; ctx.fillRect(0, 0, W, H); }
   }
   useFloor(vf);
   drawBaseCached(drawBase, vf === 1); drawMid(); drawSolid(vf === 1); drawMarks(true); drawHeat(vf); drawReplayHits(vf); drawTraps(vf);
@@ -4029,6 +4282,7 @@ function draw() {
   // bushes and corn go on top so anyone inside looks hidden
   if (!ISO) drawOverlays();
   function drawOverlays() { for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (ISO) continue;
     if (PROP[y * W + x] === 'G') drawProp('G', x, y);
     if (PROP[y * W + x] === '6') drawHook(x, y);
     if (PROP[y * W + x] === 'T' && !ISO) {
@@ -5103,7 +5357,16 @@ function carryStep(dt, D) {
 }
 function drawCarried(vf) {
   const r = runner, c = chaser;
-  if (r.carried && c.floor === vf) {
+  if (r.carried && c.floor === vf && ISO) {   // over the chaser's shoulder, kicking
+    const a = c.face + Math.PI / 2, x = c.x + Math.cos(a) * 0.22, y = c.y + Math.sin(a) * 0.22;
+    drawUpright(x, y, { face: c.face + Math.PI / 2, body: PAL.run, phase: mode === 'play' ? now * 20 : null, run: true, kind: 'runner', lift: 1.05 + personLift(c.x, c.y) });
+    if (mode === 'play') {
+      const [lx, ly] = labelAt(c.x, c.y, 2.2), w = ISO.a * 1.6;
+      ctx.save(); ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0);
+      ctx.fillStyle = '#0e1213'; ctx.fillRect(lx - w / 2, ly, w, 6); ctx.fillStyle = '#f0b648'; ctx.fillRect(lx - w / 2, ly, w * Math.min(1, r.carried.s), 6);
+      ctx.restore();
+    }
+  } else if (r.carried && c.floor === vf) {
     const a = c.face + Math.PI / 2, x = c.x + Math.cos(a) * 0.22, y = c.y + Math.sin(a) * 0.22;
     drawPerson(x, y, c.face + Math.PI / 2, r.r * 0.85, PAL.run, '#e8c9a0', mode === 'play' ? now * 20 : null, false);
     if (mode === 'play') {
@@ -5112,7 +5375,8 @@ function drawCarried(vf) {
     }
   }
   if (r.hooked && r.floor === vf) {
-    drawPerson(r.x, r.y, Math.PI / 2, r.r, PAL.run, '#e8c9a0', null, false);
+    if (ISO) drawUpright(r.x, r.y, { face: Math.PI / 4, body: PAL.run, phase: Math.sin(now * 3) * .3 + 1.6, kind: 'runner', lift: .55 });
+    else drawPerson(r.x, r.y, Math.PI / 2, r.r, PAL.run, '#e8c9a0', null, false);
     ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .06; ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .12, 0, 7); ctx.stroke();
   }
 }
@@ -5460,6 +5724,7 @@ function drawExtras14(vf) {
     ctx.beginPath(); ctx.arc(c.x, c.y, c.r + .3, 0, 7); ctx.stroke(); ctx.restore();
   }
   // smoke clouds: drawn over everyone, so you really can't see into them
+  if (ISO) { isoSmoke(vf); return; }
   for (const s of smokes) {
     if (s.f !== vf) continue;
     const a = smokeAmount(s); if (a <= 0) continue;
@@ -5472,6 +5737,27 @@ function drawExtras14(vf) {
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, R * 0.75, 0, 7); ctx.fill();
     }
   }
+}
+function isoSmoke(vf) {   // a cloud with height: puffs stacked up to about head height and above
+  ctx.save(); ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0);
+  for (const s of smokes) {
+    if (s.f !== vf) continue;
+    const a = smokeAmount(s); if (a <= 0) continue;
+    const R = SMOKE_R * smokeGrow(s);
+    const puffs = [];
+    for (let i = 0; i < 14; i++) {
+      const ang = i * 2.4 + (s.x * 3 + s.y) + (now - s.t) * 0.15 * (i % 2 ? 1 : -1), rr = i % 7 === 0 ? 0 : R * (0.35 + (i % 3) * .15);
+      puffs.push([s.x + Math.cos(ang) * rr, s.y + Math.sin(ang) * rr, .3 + (i % 4) * .45 + Math.sin(now * .8 + i) * .05]);
+    }
+    puffs.sort((A, B) => (A[0] + A[1]) - (B[0] + B[1]));
+    for (const [px, py, z] of puffs) {
+      const [sx, sy] = P3(px, py, z), rad = R * .62 * ISO.a * 1.25;
+      const g = ctx.createRadialGradient(sx - rad * .2, sy - rad * .25, 0, sx, sy, rad);
+      g.addColorStop(0, 'rgba(196,203,206,' + (0.8 * a).toFixed(3) + ')'); g.addColorStop(.6, 'rgba(160,168,172,' + (0.55 * a).toFixed(3) + ')'); g.addColorStop(1, 'rgba(150,158,162,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, rad, 0, 7); ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 const smokeGrow = s => Math.max(0, Math.min(1, (now - s.t) / 0.5));
 const smokeAmount = s => { const age = now - s.t; return age < 0 || age > SMOKE_LIFE ? 0 : Math.min(1, (SMOKE_LIFE - age) / 1.2); };
@@ -5583,7 +5869,9 @@ function drawHowlMark(r) {
   ctx.strokeStyle = 'rgba(226,80,63,' + (0.45 + 0.4 * pulse).toFixed(2) + ')'; ctx.lineWidth = .07;
   ctx.beginPath(); ctx.arc(r.x, r.y, r.r + .3 + pulse * .08, 0, 7); ctx.stroke();
   // a claw-mark sign over your head, with the time left as a shrinking arc
-  ctx.translate(r.x, r.y - r.r - .55); ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .06;
+  if (ISO) { const [lx, ly] = labelAt(r.x, r.y, .3); ctx.setTransform(DPR(), 0, 0, DPR(), 0, 0); ctx.translate(lx, ly - ISO.a * personLift(r.x, r.y) * ISO_Z); ctx.scale(ISO.a * 1.1, ISO.a * 1.1); }
+  else ctx.translate(r.x, r.y - r.r - .55);
+  ctx.strokeStyle = '#e2503f'; ctx.lineWidth = .06;
   for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(k * .1 - .05, -.16); ctx.lineTo(k * .1 + .05, .16); ctx.stroke(); }
   ctx.globalAlpha = .7; ctx.beginPath(); ctx.arc(0, 0, .26, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * left / HOWL_MARK); ctx.stroke();
   ctx.restore();
